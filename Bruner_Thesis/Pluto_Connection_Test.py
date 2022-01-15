@@ -11,17 +11,17 @@ import adi
 
 # Signal processing
 import numpy as np
-import scipy.signal as signal
-from scipy.fftpack import fft
+# import scipy.signal as signal
+# from scipy.fftpack import fft
 
 # Plotting
-from pyqtgraph.Qt import QtGui, QtCore
-import pyqtgraph as pg
+# from pyqtgraph.Qt import QtGui, QtCore
+# import pyqtgraph as pg
 import matplotlib.pyplot as plt
 
 # %%
 # Initialize pluto SDR
-sdr = adi.Pluto()
+sdr = adi.Pluto(uri='ip:analog.local')
 
 sample_rate = int(10e6)
 buffer_size = int(2**14)
