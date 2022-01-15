@@ -106,7 +106,8 @@ plt.ylim([-120, -20])
 
 line1, = ax.plot(freq, X_k_dbfs)
 
-while (True):
+real_time_plot = False
+while (real_time_plot):
     # Collect new samples
     x_n = sdr.rx()
     x_n *= w_n
