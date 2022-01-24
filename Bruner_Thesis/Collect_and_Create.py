@@ -72,7 +72,7 @@ q = np.cos(2 * np.pi * f_c * n) * buffer_size
 iq = i + (1j * q)
 
 # Transmit IQ waveform
-sdr.tx(iq)
+# sdr.tx(iq)
 
 """ 
     Receive signal and do simple processing 
