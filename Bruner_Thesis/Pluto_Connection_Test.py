@@ -4,6 +4,7 @@
 """
 import sys
 import time
+import csv
 
 # Hardware interfacing
 import iio
@@ -15,8 +16,8 @@ import scipy.signal as signal
 from scipy.fftpack import fft
 
 # Plotting
-from pyqtgraph.Qt import QtGui, QtCore
-import pyqtgraph as pg
+# from pyqtgraph.Qt import QtGui, QtCore
+# import pyqtgraph as pg
 import matplotlib.pyplot as plt
 
 # %%
@@ -66,9 +67,17 @@ iq = i + (1j * q)
 """ 
     Receive signal and do simple processing 
 """
-# Collect buffer_size samples
-x_n = sdr.rx()
+output_file = 'data.csv'
+file = open(output_file, 'w')
+writer = csv.writer(file)
 
+# Collect buffer_size samples
+num_samples = 20
+for i in range(num_samples):
+    x_n = sdr.rx()
+    writer.writerow(x_n)
+
+'''
 # Number of collected samples (i.e. buffer size)
 M = len(x_n)          
 
@@ -127,4 +136,4 @@ while (real_time_plot):
     fig.canvas.draw()
     fig.canvas.flush_events()
     
-
+'''
