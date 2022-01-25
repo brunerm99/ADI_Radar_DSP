@@ -1,2 +1,3 @@
 # netCDF files
-*.nc
+# *.nc
+test.nc
