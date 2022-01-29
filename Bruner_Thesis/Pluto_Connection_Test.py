@@ -6,10 +6,6 @@ import sys
 import time
 import csv
 
-# Hardware interfacing
-import iio
-import adi
-
 # Signal processing
 import numpy as np
 # import scipy.signal as signal
@@ -20,10 +16,22 @@ import numpy as np
 # import pyqtgraph as pg
 import matplotlib.pyplot as plt
 
-# %%
-# Initialize pluto SDR
-sdr = adi.Pluto(uri='ip:analog.local')
 
+# Hardware interfacing
+import iio
+import adi
+
+# %%
+"""
+    Initialize pluto SDR
+"""
+# sdr = adi.Pluto(uri='ip:192.168.2.1')
+sdr = adi.Pluto(uri='ip:pluto.local')
+
+# %%
+"""
+    Configuration
+"""
 sample_rate = int(10e6)
 buffer_size = int(2**14)
 rx_lo = int(2e9)
@@ -47,9 +55,6 @@ print("RX LO: {:0.2f}MHz".format(rx_lo / 1e6))
 print("TX LO: {:0.2f}MHz".format(tx_lo / 1e6))
 
 # %%
-# Matplotlib setup
-plt.ion()
-# %%
 
 # Generate output waveform
 f_s = int(sdr.sample_rate)
@@ -62,7 +67,13 @@ q = np.cos(2 * np.pi * f_c * n) * buffer_size
 iq = i + (1j * q)
 
 # Transmit IQ waveform
-# sdr.tx(iq)
+sdr.tx(iq)
+
+# %%
+# Matplotlib setup
+plt.ion()
+
+# %%
 
 """ 
     Receive signal and do simple processing 
