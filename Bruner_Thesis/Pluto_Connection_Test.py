@@ -83,12 +83,14 @@ file = open(output_file, 'w')
 writer = csv.writer(file)
 
 # Collect buffer_size samples
-num_samples = 20
-for i in range(num_samples):
-    x_n = sdr.rx()
-    writer.writerow(x_n)
+# num_samples = 20
+# for i in range(num_samples):
+#     x_n = sdr.rx()
+#     writer.writerow(x_n)
 
-'''
+# Collect samples
+x_n = sdr.rx()
+
 # Number of collected samples (i.e. buffer size)
 M = len(x_n)          
 
@@ -126,7 +128,7 @@ plt.ylim([-120, -20])
 
 line1, = ax.plot(freq, X_k_dbfs)
 
-real_time_plot = False
+real_time_plot = True
 while (real_time_plot):
     # Collect new samples
     x_n = sdr.rx()
@@ -139,12 +141,10 @@ while (real_time_plot):
     X_k_mag = np.abs(X_k) * 2 / np.sum(w_n)    
     X_k_dbfs = 20*np.log10(X_k_mag / adc_size)
 
-    targets = freq[np.where(X_k_dbfs > noise_floor + min_snr)]
-    print(targets)
-
     # Update plot
     line1.set_ydata(X_k_dbfs)
     fig.canvas.draw()
     fig.canvas.flush_events()
     
-'''
+
+# %%
