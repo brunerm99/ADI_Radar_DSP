@@ -1,3 +1,4 @@
-# netCDF files
+# data files
 # *.nc
 test.nc
+*.csv
