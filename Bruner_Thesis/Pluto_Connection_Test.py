@@ -58,7 +58,7 @@ print("TX LO: {:0.2f}MHz".format(tx_lo / 1e6))
 
 # Generate output waveform
 f_s = int(sdr.sample_rate)
-f_c = 3e9
+f_c = 2e9
 T_s = 1 / float(f_s)
 M = buffer_size
 n = np.arange(0, M * T_s, T_s)
@@ -132,7 +132,7 @@ real_time_plot = True
 while (real_time_plot):
     # Collect new samples
     x_n = sdr.rx()
-    x_n *= w_n
+    # x_n *= w_n
 
     # Calculate DFT, take magnitude, normalize, convert to dBFS
     X_k = np.absolute(np.fft.fft(x_n))
