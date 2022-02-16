@@ -2,3 +2,8 @@
 # *.nc
 test.nc
 *.csv
+
+__pycache__
+
+# VSCODE environment file
+.env
