@@ -1,3 +1,4 @@
+# %%
 # Copyright (C) 2019 Analog Devices, Inc.
 #
 # All rights reserved.
@@ -36,6 +37,10 @@ Simple FMCW demo with PHASER and ADALM-PLUTO
 waterfall plot modified from:  https://amyboyle.ninja/Pyqtgraph-live-spectrogram
 """
 
+# %%
+
+from random import sample
+from tkinter.tix import REAL
 import PyQt5
 from pyqtgraph.Qt import QtGui, QtCore
 import pyqtgraph as pg
@@ -46,8 +51,13 @@ from scipy import signal
 import faulthandler
 faulthandler.enable()
 
+# Signal processing stuff
+from numpy.fft import fft, ifft, fftshift, fftfreq
+from numpy import absolute, pi
+
 import adi
 
+# %%
 
 # Instantiate all the Devices
 rpi_ip = "ip:phaser.local"  # IP address of the Raspberry Pi
@@ -81,7 +91,7 @@ center_freq = 2.1e9
 signal_freq = 100e3
 num_slices = 200
 fft_size = 1024*16
-
+# fft_size = 2**10
 
 # Create radio
 '''This script is for Pluto Rev C, dual channel setup'''
@@ -108,11 +118,11 @@ my_sdr.tx_hardwaregain_chan1 = -0   # must be between 0 and -88
 
 # Configure the ADF4159 Rampling PLL
 output_freq = 12.1e9
-BW = 500e6/4
+BW = 500e6
 num_steps = 1000
-ramp_time = 1e3
+ramp_time = 1e3 # us
 my_phaser.frequency = int(output_freq/4) # Output frequency divided by 4
-my_phaser.freq_dev_range = int(BW) # frequency deviation range in Hz.  This is the total freq deviation of the complete freq ramp
+my_phaser.freq_dev_range = int(BW/4) # frequency deviation range in Hz.  This is the total freq deviation of the complete freq ramp
 my_phaser.freq_dev_step = int(BW/num_steps) # frequency deviation step in Hz.  This is fDEV, in Hz.  Can be positive or negative
 my_phaser.freq_dev_time = int(ramp_time) # total time (in us) of the complete frequency ramp
 my_phaser.delay_word = 4095     # 12 bit delay word.  4095*PFD = 40.95 us.  For sawtooth ramps, this is also the length of the Ramp_complete signal
@@ -128,6 +138,19 @@ my_phaser.tx_trig_en = 0             # start a ramp with TXdata
 # my_phaser.sing_ful_tri = 1           # full triangle enable/disable -- this is used with the single_ramp_burst mode 
 # my_phaser.tx_trig_en = 1             # start a ramp with TXdata
 my_phaser.enable = 0                 # 0 = PLL enable.  Write this last to update all the registers
+
+"""
+    Print config
+"""
+print("""
+CONFIG:
+Sample rate: {sample_rate}MHz
+Num samples: 2^{Nlog2}
+Bandwidth: {BW}MHz
+Ramp time: {ramp_time}ms
+Output frequency: {output_freq}MHz
+""".format(sample_rate=sample_rate / 1e6, Nlog2=int(np.log2(fft_size)), 
+    BW=BW / 1e6, ramp_time=ramp_time / 1e3, output_freq=output_freq / 1e6))
 
 
 # Configure the TDD logic to instruct how many ADF4159 ramps will appear in one Pluto Rx buffer
@@ -168,10 +191,11 @@ q = np.sin(2 * np.pi * t * fc) * 2 ** 14
 iq = 1 * (i + 1j * q)
 
 # Send data
-my_sdr._ctx.set_timeout(30000)
+my_sdr._ctx.set_timeout(0)
 my_sdr.tx([iq*0, iq])  # only send data to the 2nd channel (that's all we need)
 
 
+"""
 # create the object for drawing the waterfall plot
 class PlutoSDR():
     def __init__(self, signal):
@@ -216,21 +240,69 @@ class SpectrogramWidget(pg.PlotWidget):
         self.img_array[-1] = s_dbfs
         self.img.setLevels([-60,-20])
         self.img.setImage(self.img_array, autoLevels=False)
-        
+"""        
 
 if __name__ == '__main__':
-    app = QtGui.QApplication([])
-    w = SpectrogramWidget()
-    w.read_collected.connect(w.update)
-    pluto = PlutoSDR(w.read_collected)
+    WATERFALL = False
+    REAL_TIME_PLOT = True
+    if (WATERFALL):
+        print("\nWaterfall\n")
+        app = QtGui.QApplication([])
+        w = SpectrogramWidget()
+        w.read_collected.connect(w.update)
+        pluto = PlutoSDR(w.read_collected)
 
-    # time (seconds) between reads
-    t = QtCore.QTimer()
-    t.timeout.connect(pluto.read)
-    t.start(100) #QTimer takes ms
+        # time (seconds) between reads
+        t = QtCore.QTimer()
+        t.timeout.connect(pluto.read)
+        t.start(100) #QTimer takes ms
 
-    app.exec_()
-    my_sdr.tx_destroy_buffer()   # If sdr.tx_cyclic_buffer=true, then when the program ends, destroy the Tx buffer.  Otherwise, you'll get an error when you run the program again.
+        app.exec_()
+        my_sdr.tx_destroy_buffer()   # If sdr.tx_cyclic_buffer=true, then when the program ends, destroy the Tx buffer.  Otherwise, you'll get an error when you run the program again.
+    else:
+        print("\nDFT\n")
+        # %%
+        """
+            Plot DFT using matplotlib
+        """
+        plt.ion()
+        # Create figure
+        fig, ax = plt.subplots()
+        plt.title("Received Signal - Frequency Domain")
+        plt.xlabel("frequency [MHz]")
+        plt.ylabel("dB")
+        # plt.ylim([-120, -20])
 
+        # %%
+
+        # Collect raw data buffer, take DFT, and do basic processing
+        print("Collecting data...")
+        x_n = my_sdr.rx()
+        print("Done")
+        x_n = x_n[0] + x_n[1]
+
+        X_k = absolute(fft(x_n))
+        # X_k = X_k
+        X_k = fftshift(X_k)
+
+        N = len(X_k)
+        freq = fftshift(fftfreq(N, 1 / sample_rate))
+        # freq = np.linspace(-pi, pi, N)
+
+        line1, = ax.plot(freq, 10 * np.log10(X_k))
+
+        while (REAL_TIME_PLOT):
+            print("Collecting data...")
+            x_n = my_sdr.rx()
+            print("Done")
+            x_n = x_n[0] + x_n[1]
+
+            X_k = absolute(fft(x_n))
+            # X_k = X_k
+            X_k = fftshift(X_k)
+
+            line1.set_ydata(10 * np.log10(X_k))
+            fig.canvas.draw()
+            fig.canvas.flush_events()
 
 
