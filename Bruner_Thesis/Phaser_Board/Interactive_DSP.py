@@ -6,14 +6,13 @@
 
 from mimetypes import init
 import time
-from turtle import update
-from venv import create
 import matplotlib.pyplot as plt
 import numpy as np
 import faulthandler
 faulthandler.enable()
 
 # Signal processing stuff
+from scipy import signal
 from scipy.signal import windows
 from numpy.fft import fft, ifft, fftshift, fftfreq
 from numpy import absolute, pi
@@ -219,6 +218,7 @@ def dsp_cli():
     """
     print('Initializing plot...', end='')
     fig, ax, line1, line2, x_n, axis_limits, cfar_params = init_plot()
+    x_n_orig = x_n
     print('Done')
 
     print('Pre-loading window functions...', end='')
@@ -239,6 +239,16 @@ def dsp_cli():
 
     fig_dir = 'Figures/'
 
+    filter_types = [
+        'lowpass',
+        'highpass',
+    ]
+
+    filters = {
+        'Chebyshev1': signal.cheby1,
+        'Chebyshev2': signal.cheby2,
+    }
+
     #############################################
 
     help = """
@@ -247,6 +257,8 @@ Options:
     2. Change window function
     3. CFAR
     4. Remove CFAR threshold
+    5. Filter
+    6. Remove filter
     s. Save figure as PNG
     r. Reload
     q. Quit
@@ -282,33 +294,61 @@ Options:
                 print('Invalid entry...')
                 continue
         elif (cli_input == '3'):
-            # try:
-            cli_cfar_params = input('Enter CFAR parameters \'Num guard cells, num ref cells, bias\': ').split(',')
-            cli_cfar_params = list(map(lambda x : float(x), cli_cfar_params))
-            print('CFAR method options:')
-            for index, method in enumerate(cfar_methods):
-                print('\t%i. %s' % (index + 1, method))
-            cli_cfar_method = input('> ')
-            cli_mask = input('Mask values below threshold? y/n: ')
-            cli_mask = True if cli_mask == 'y' else False
-            cfar_params = {
-                'num_guard_cells': int(cli_cfar_params[0]),
-                'num_ref_cells': int(cli_cfar_params[1]),
-                'bias': cli_cfar_params[2],
-                'method': cfar_methods[int(cli_cfar_method) - 1],
-                'mask': cli_mask,
-            }
-            print(cfar_params)
-            print(axis_limits)
-            fig, ax, line1, line2, x_n, axis_limits, cfar_params = update_plot(fig, ax, line1, 
-                line2, x_n, axis_limits, cfar_params)
-            # except:
-            #     print('Invalid entry...')
-            #     continue
+            try:
+                cli_cfar_params = input('Enter CFAR parameters \'Num guard cells, num ref cells, bias\': ').split(',')
+                cli_cfar_params = list(map(lambda x : float(x), cli_cfar_params))
+                print('CFAR method options:')
+                for index, method in enumerate(cfar_methods):
+                    print('\t%i. %s' % (index + 1, method))
+                cli_cfar_method = input('> ')
+                cli_mask = input('Mask values below threshold? y/n: ')
+                cli_mask = True if cli_mask == 'y' else False
+                cfar_params = {
+                    'num_guard_cells': int(cli_cfar_params[0]),
+                    'num_ref_cells': int(cli_cfar_params[1]),
+                    'bias': cli_cfar_params[2],
+                    'method': cfar_methods[int(cli_cfar_method) - 1],
+                    'mask': cli_mask,
+                }
+                print(cfar_params)
+                print(axis_limits)
+                fig, ax, line1, line2, x_n, axis_limits, cfar_params = update_plot(fig, ax, line1, 
+                    line2, x_n, axis_limits, cfar_params)
+            except:
+                print('Invalid entry...')
+                continue
         elif (cli_input == '4'):
             # Remove CFAR method
             fig, ax, line1, line2, x_n, axis_limits, cfar_params = update_plot(fig, ax, line1, 
                 line2, x_n, axis_limits, None)
+        elif (cli_input == '5'):
+            print('Filter type options:')
+            try:
+                for index, filter_type in enumerate(filter_types):
+                    print('\t%i. %s' % (index + 1, filter_type.title()))
+                cli_filter_type = filter_types[int(input('> ')) - 1]
+                cli_cutoff = int(input('Enter cutoff frequency [Hz]: '))
+                cli_rp = int(input('Enter maximum ripple [dB]: '))
+                cli_filter_order = int(input('Enter filter order: '))
+
+                print('Filter options:')
+                for index, name in enumerate(filters.keys()):
+                    print('\t%i. %s' % (index + 1, name))
+                cli_filter = int(input('> ')) - 1
+                fs = int(sample_rate)
+                print(cli_filter_order, cli_rp, cli_cutoff, cli_filter_type, fs)
+                sos = filters[list(filters.keys())[cli_filter]](cli_filter_order, 
+                    cli_rp, cli_cutoff, btype=cli_filter_type, fs=fs, output='sos')
+                x_n_filtered = signal.sosfilt(sos, x_n)
+                fig, ax, line1, line2, x_n, axis_limits, cfar_params = update_plot(fig, ax, line1, 
+                    line2, x_n_filtered, axis_limits, cfar_params)
+            except:
+                print('Invalid entry...')
+                continue
+        elif (cli_input == '6'):
+            # Remove CFAR method
+            fig, ax, line1, line2, x_n, axis_limits, cfar_params = update_plot(fig, ax, line1, 
+                line2, x_n_orig, axis_limits, None)
         elif (cli_input == 's'):
             cli_filename = input('Input filename (no extension): ')
             fig.savefig(fig_dir + cli_filename + '.png')
