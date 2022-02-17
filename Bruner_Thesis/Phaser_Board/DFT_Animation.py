@@ -193,7 +193,7 @@ def plot_rx(realtime_plot=False, plot_dist=False, cfar_params=None, yaxis_limits
         ax.set_xlabel("Distance [m]", fontsize=22)
         xaxis = dist
     else:
-        ax.set_xlim([-30, 30])
+        # ax.set_xlim([-30, 30])
         ax.set_xlabel("Frequency [kHz]", fontsize=22)
         xaxis = freq_kHz
 
@@ -275,8 +275,8 @@ if __name__ == '__main__':
         'bias': 2,
         'method': 'average',
     }
-    # fig = plot_rx(True, False, cfar_params)
-    # output_filename = 'test.png'
-    # fig.savefig('Figures/' + output_filename)
+    fig = plot_rx(False, False, yaxis_limits=[0, 70])
+    output_filename = 'test.png'
+    fig.savefig('Figures/' + output_filename)
 
-    create_figures(10, 30, 2)
+    # create_figures(10, 30, 2)
