@@ -1,4 +1,3 @@
-# %%
 # Copyright (C) 2019 Analog Devices, Inc.
 #
 # All rights reserved.
@@ -37,9 +36,8 @@ Simple FMCW demo with PHASER and ADALM-PLUTO
 waterfall plot modified from:  https://amyboyle.ninja/Pyqtgraph-live-spectrogram
 """
 
-# %%
-
 import time
+from venv import create
 import matplotlib.pyplot as plt
 import numpy as np
 from scipy import signal
@@ -53,7 +51,6 @@ from target_detection import cfar
 
 import adi
 
-# %%
 
 # Instantiate all the Devices
 rpi_ip = "ip:phaser.local"  # IP address of the Raspberry Pi
@@ -82,7 +79,7 @@ for i in range(0, 8):
     my_phaser.set_chan_phase(i, 0)
 
 
-sample_rate = 2e6
+sample_rate = 0.6e6
 center_freq = 2.1e9
 signal_freq = 100e3
 num_slices = 200
@@ -117,6 +114,7 @@ output_freq = 12.1e9
 BW = 500e6
 num_steps = 1000
 ramp_time = 1e3 # us
+ramp_time_s = ramp_time / 1e6
 my_phaser.frequency = int(output_freq/4) # Output frequency divided by 4
 my_phaser.freq_dev_range = int(BW/4) # frequency deviation range in Hz.  This is the total freq deviation of the complete freq ramp
 my_phaser.freq_dev_step = int(BW/num_steps) # frequency deviation step in Hz.  This is fDEV, in Hz.  Can be positive or negative
@@ -163,61 +161,122 @@ iq = 1 * (i + 1j * q)
 my_sdr._ctx.set_timeout(0)
 my_sdr.tx([iq*0, iq])  # only send data to the 2nd channel (that's all we need)
 
-if __name__ == '__main__':
-    REAL_TIME_PLOT = True
-    # %%
-    """
-        Plot DFT using matplotlib
-    """
-    plt.ion()
-    # Create figure
-    fig, ax = plt.subplots()
-    plt.title("Received Signal - Frequency Domain")
-    plt.xlabel("frequency [MHz]")
-    plt.ylabel("dB")
-    # plt.ylim([-120, -20])
-
-    # %%
-
+def plot_rx(realtime_plot=False, plot_dist=False, cfar_params=None, yaxis_limits=[20, 50],
+        masked=False):
     # Collect raw data buffer, take DFT, and do basic processing
-    print("Collecting data...", end="")
     x_n = my_sdr.rx()
-    print("Done")
     x_n = x_n[0] + x_n[1]
 
     X_k = absolute(fft(x_n))
     X_k = fftshift(X_k)
 
+    # Create figure
+    plt.ion()
+    fig, ax = plt.subplots()
+    fig.set_figheight(8)
+    fig.set_figwidth(16)
+    ax.set_ylabel("Magnitude [dB]", fontsize=22)
+    ax.set_ylim(yaxis_limits)
+
+    # Create frequency axis
     N = len(X_k)
     freq = fftshift(fftfreq(N, 1 / sample_rate))
+    freq_kHz = freq / 1e3
 
-    # CFAR parameters
-    num_guard_cells = 10
-    num_ref_cells = 30
-    bias = 2
-    # Get CFAR values and mask non-targets
-    cfar_values, targets_only = cfar(X_k, num_guard_cells, 
-        num_ref_cells, bias, cfar_method='greatest')
+    # Create range-FFT scale
+    c = 3e8
+    slope = BW / ramp_time_s
+    dist = (c / slope) * freq
 
-    line1, = ax.plot(freq, 10 * np.log10(targets_only), c='b')
-    line2, = ax.plot(freq, 10 * np.log10(cfar_values), c='r')
+    if (plot_dist):
+        ax.set_xlim([-15, 15])
+        ax.set_xlabel("Distance [m]", fontsize=22)
+        xaxis = dist
+    else:
+        ax.set_xlim([-30, 30])
+        ax.set_xlabel("Frequency [kHz]", fontsize=22)
+        xaxis = freq_kHz
 
-    while (REAL_TIME_PLOT):
-        print("Collecting data...", end="")
+    if (cfar_params):
+        # Get CFAR values and mask non-targets
+        cfar_values, targets_only = cfar(X_k, cfar_params['num_guard_cells'], 
+            cfar_params['num_ref_cells'], cfar_params['bias'], cfar_params['method'])
+        if (masked):
+            X_k = targets_only
+        line1, = ax.plot(xaxis, 10 * np.log10(X_k), c='b', label="Received targets")
+        line2, = ax.plot(xaxis, 10 * np.log10(cfar_values), c='r', label="CFAR Threshold")
+
+        ax.set_title("Received Signal - Frequency Domain\nCFAR Method: %s" % 
+            (cfar_params['method']), fontsize=24)
+        ax.legend(fontsize=18, loc='upper left')
+    else:
+        line1, = ax.plot(xaxis, 10 * np.log10(X_k), c='b')
+        ax.set_title("Received Signal - Frequency Domain", fontsize=24)
+
+    while (realtime_plot):
         x_n = my_sdr.rx()
-        print("Done")
         x_n = x_n[0] + x_n[1]
 
         X_k = absolute(fft(x_n))
         X_k = fftshift(X_k)
 
         # Get CFAR values and mask non-targets
-        cfar_values, targets_only = cfar(X_k, num_guard_cells, 
-            num_ref_cells, bias, cfar_method='greatest')
-
-        line1.set_ydata(10 * np.log10(targets_only))
-        line2.set_ydata(10 * np.log10(cfar_values))
+        if (cfar_params):
+            cfar_values, targets_only = cfar(X_k, cfar_params['num_guard_cells'], 
+                cfar_params['num_ref_cells'], cfar_params['bias'], cfar_params['method'])
+            if (masked):
+                X_k = targets_only
+            line1.set_ydata(10 * np.log10(X_k))
+            line2.set_ydata(10 * np.log10(cfar_values))
+        else:
+            line1.set_ydata(10 * np.log10(X_k))
         fig.canvas.draw()
         fig.canvas.flush_events()
 
+    fig.canvas.draw()
+    return fig
 
+"""
+    Function: create_figures()
+    Description: Creates and saves figures for use in my thesis. This includes all CFAR methods
+        both with and without the values below the threshold masked. 
+"""
+def create_figures(num_guard_cells, num_ref_cells, bias, fig_dir='Figures/'):
+    cfar_methods = ['greatest', 'average', 'smallest']
+    cfar_params = {
+        'num_guard_cells': num_guard_cells,
+        'num_ref_cells': num_ref_cells,
+        'bias': bias,
+        'method': '',
+    }
+    for method in cfar_methods:
+        cfar_params['method'] = method
+
+        fig = plot_rx(realtime_plot=False, plot_dist=False, cfar_params=cfar_params, masked=True)
+        output_filename = 'CFAR_' + method + '_Masked_Frequency.png'
+        fig.savefig(fig_dir + output_filename)
+
+        fig = plot_rx(realtime_plot=False, plot_dist=True, cfar_params=cfar_params, masked=True)
+        output_filename = 'CFAR_' + method + '_Masked_Distance.png'
+        fig.savefig(fig_dir + output_filename)
+
+        fig = plot_rx(realtime_plot=False, plot_dist=False, cfar_params=cfar_params, masked=False)
+        output_filename = 'CFAR_' + method + '_Frequency.png'
+        fig.savefig(fig_dir + output_filename)
+
+        fig = plot_rx(realtime_plot=False, plot_dist=True, cfar_params=cfar_params, masked=False)
+        output_filename = 'CFAR_' + method + '_Distance.png'
+        fig.savefig(fig_dir + output_filename)
+
+if __name__ == '__main__':
+    cfar_params = {
+        'num_guard_cells': 10,
+        'num_ref_cells': 30,
+        'bias': 2,
+        'method': 'average',
+    }
+    # fig = plot_rx(True, False, cfar_params)
+    # output_filename = 'test.png'
+    # fig.savefig('Figures/' + output_filename)
+
+    create_figures(10, 30, 2)
