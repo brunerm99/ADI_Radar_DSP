@@ -1,6 +1,7 @@
 """
-Simple FMCW demo with PHASER and ADALM-PLUTO
-waterfall plot modified from:  https://amyboyle.ninja/Pyqtgraph-live-spectrogram
+    This is a CLI tool to test out different combinations of windows, filters, thresholding, etc.
+    without having to modify code and rerun everytime. I am still actively working on it, so it
+    doesn't include much yet. 
 """
 
 from mimetypes import init
