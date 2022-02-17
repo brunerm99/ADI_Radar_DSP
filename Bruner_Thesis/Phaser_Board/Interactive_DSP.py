@@ -237,6 +237,8 @@ def dsp_cli():
         'smallest',
     ]
 
+    fig_dir = 'Figures/'
+
     #############################################
 
     help = """
@@ -245,6 +247,7 @@ Options:
     2. Change window function
     3. CFAR
     4. Remove CFAR threshold
+    s. Save figure as PNG
     r. Reload
     q. Quit
 """
@@ -306,6 +309,10 @@ Options:
             # Remove CFAR method
             fig, ax, line1, line2, x_n, axis_limits, cfar_params = update_plot(fig, ax, line1, 
                 line2, x_n, axis_limits, None)
+        elif (cli_input == 's'):
+            cli_filename = input('Input filename (no extension): ')
+            fig.savefig(fig_dir + cli_filename + '.png')
+            print('Figure saved to: %s' % (fig_dir + cli_filename + '.png'))
         elif (cli_input == 'r'):
             plt.close(fig)
             dsp_cli()
