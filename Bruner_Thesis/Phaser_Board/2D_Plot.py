@@ -298,7 +298,7 @@ def polar_animation(frame):
         X_k = absolute(fft(x_n))
         X_k = fftshift(X_k)
 
-        X_k_rs, _ = reduce_array_size(X_k, 4)
+        X_k_rs, _ = reduce_array_size(X_k, 8)
 
         X_k_width = np.ma.masked_all((beamwidth, N_rs))
         X_k_width[:] = X_k_rs
@@ -306,9 +306,9 @@ def polar_animation(frame):
         zdata[:,frame - int(beamwidth / 2):frame + int(beamwidth / 2)] = X_k_width.T
         pc.set_array(zdata)
 
-# anim = animation.FuncAnimation(fig, polar_animation, round(N_theta / 2 - (beamwidth / 2)), interval=50, 
-#     blit=False, repeat=True)
-# plt.show()
+anim = animation.FuncAnimation(fig, polar_animation, round(N_theta / 2 - (beamwidth / 2)), interval=50, 
+    blit=False, repeat=True)
+plt.show()
 
 
 # Testing my data reduction...
@@ -323,6 +323,6 @@ X_k_rs, _ = reduce_array_size(X_k, 4)
 X_k_width = np.ma.masked_all((beamwidth, N_rs))
 X_k_width[:] = X_k_rs
 
-fig, ax = plt.subplots()
-ax.plot(X_k_rs)
+# fig, ax = plt.subplots()
+# ax.plot(X_k_rs)
 # plt.show()
