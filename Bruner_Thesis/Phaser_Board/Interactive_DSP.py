@@ -155,6 +155,11 @@ def init_plot(cfar_params=None, axis_limits=[-sample_rate / 2e3, sample_rate / 2
     freq = fftshift(fftfreq(N, 1 / sample_rate))
     freq_kHz = freq / 1e3
 
+    # Create range-FFT scale
+    c = 3e8
+    slope = BW / ramp_time_s
+    dist = (c / slope) * freq
+
     line1, = ax.plot(freq_kHz, 10 * np.log10(X_k), c='b', label="Received targets")
 
     # CFAR plot placeholder
@@ -172,9 +177,10 @@ def init_plot(cfar_params=None, axis_limits=[-sample_rate / 2e3, sample_rate / 2
     fig.canvas.flush_events()
     fig.canvas.draw()
 
-    return fig, ax, line1, line2, x_n, axis_limits, cfar_params
+    return fig, ax, line1, line2, x_n, axis_limits, cfar_params, freq_kHz, dist
 
-def update_plot(fig, ax, line1, line2, x_n, axis_limits, cfar_params=None):
+def update_plot(fig, ax, line1, line2, x_n, axis_limits, cfar_params=None, xdata=np.array([]),
+    xlabel=None):
     X_k = absolute(fft(x_n))
     X_k = fftshift(X_k)
 
@@ -206,6 +212,27 @@ def update_plot(fig, ax, line1, line2, x_n, axis_limits, cfar_params=None):
         except:
             pass
 
+    # Toggle xaxis to frequency/distance
+    if (xdata.size > 0):
+        line1.set_xdata(xdata)
+
+        xdata_max = np.round(np.max(xdata), -1)
+        xdata_min = np.round(np.min(xdata), -1)
+        step = np.round((xdata_max - xdata_min) / 6, -1)
+
+        xticks = np.concatenate((np.arange(xdata_min, xdata_max, step), [xdata_max]))
+
+        ax.set_xticks(xticks)
+        ax.set_xlim([xdata_min, xdata_max])
+        ax.set_xlabel(xlabel)
+
+    # Update xticks after changing axes or limits
+    xdata_min, xdata_max = ax.get_xlim()
+    step = np.round((xdata_max - xdata_min) / 6, -1)
+
+    xticks = np.concatenate((np.arange(xdata_min, xdata_max, step), [xdata_max]))
+    ax.set_xticks(xticks)
+
     # Update plot
     fig.canvas.flush_events()
     fig.canvas.draw()
@@ -217,7 +244,8 @@ def dsp_cli():
         Initialize plot, windows, and other variables for faster runtime.
     """
     print('Initializing plot...', end='')
-    fig, ax, line1, line2, x_n, axis_limits, cfar_params = init_plot()
+    fig, ax, line1, line2, x_n, axis_limits, cfar_params, freq, dist = init_plot()
+    curr_x_freq = True
     x_n_orig = x_n
     print('Done')
 
@@ -249,6 +277,8 @@ def dsp_cli():
         'Chebyshev2': signal.cheby2,
     }
 
+    lines = {}
+
     #############################################
 
     help = """
@@ -259,6 +289,9 @@ Options:
     4. Remove CFAR threshold
     5. Filter
     6. Remove filter
+    7. Toggle x-axis (frequency/distance)
+    8. Add horizontal/vertical line
+    9. Remove horizontal/vertical lines
     s. Save figure as PNG
     r. Reload
     q. Quit
@@ -349,6 +382,28 @@ Options:
             # Remove CFAR method
             fig, ax, line1, line2, x_n, axis_limits, cfar_params = update_plot(fig, ax, line1, 
                 line2, x_n_orig, axis_limits, None)
+        elif (cli_input == '7'):
+            if (curr_x_freq):
+                fig, ax, line1, line2, x_n, axis_limits, cfar_params = update_plot(fig, ax, 
+                    line1, line2, x_n_orig, axis_limits, None, dist, xlabel='Distance [m]')
+                curr_x_freq = False
+            else:
+                fig, ax, line1, line2, x_n, axis_limits, cfar_params = update_plot(fig, ax, 
+                    line1, line2, x_n_orig, axis_limits, None, freq, xlabel='Frequency [kHz]')
+                curr_x_freq = True
+        elif (cli_input == '8'):
+            try:
+                line_function = ax.axhline if input('Horizontal/vertical? (h/v): ') == 'h' else ax.axvline
+                line_coord = float(input('Input value to insert line: '))
+                lines.update({str(line_coord): 
+                    line_function(line_coord, c='r', linestyle='dashed')})
+            except:
+                print('Invalid entry...')
+                continue
+        elif (cli_input == '9'):
+            for line in lines.values():
+                line.remove()
+
         elif (cli_input == 's'):
             cli_filename = input('Input filename (no extension): ')
             fig.savefig(fig_dir + cli_filename + '.png')
