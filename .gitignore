@@ -7,6 +7,8 @@ __pycache__
 
 # VSCODE environment file
 .env
+env_setup.sh
 
 Figures/
 *~lock*
+
