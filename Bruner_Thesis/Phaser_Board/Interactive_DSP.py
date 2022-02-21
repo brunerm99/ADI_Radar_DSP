@@ -227,11 +227,11 @@ def update_plot(fig, ax, line1, line2, x_n, axis_limits, cfar_params=None, xdata
         ax.set_xlabel(xlabel)
 
     # Update xticks after changing axes or limits
-    xdata_min, xdata_max = ax.get_xlim()
-    step = np.round((xdata_max - xdata_min) / 6, -1)
+    # xdata_min, xdata_max = ax.get_xlim()
+    # step = np.round((xdata_max - xdata_min) / 6, -1)
 
-    xticks = np.concatenate((np.arange(xdata_min, xdata_max, step), [xdata_max]))
-    ax.set_xticks(xticks)
+    # xticks = np.concatenate((np.arange(xdata_min, xdata_max, step), [xdata_max]))
+    # ax.set_xticks(xticks)
 
     # Update plot
     fig.canvas.flush_events()
@@ -239,6 +239,23 @@ def update_plot(fig, ax, line1, line2, x_n, axis_limits, cfar_params=None, xdata
 
     return fig, ax, line1, line2, x_n, axis_limits, cfar_params
 
+def new_buffer():
+    print('Collecting new buffer...', end='')
+    # Collect raw data buffer, take DFT, and do basic processing
+    x_n = my_sdr.rx()
+    x_n = x_n[0] + x_n[1]
+    print('Done')
+
+    fig, ax, line1, line2, x_n, axis_limits, cfar_params = update_plot(fig, ax, 
+        line1, line2, x_n, axis_limits, None)
+
+
+"""
+    dsp_cli()
+    Description: This is the main function which contains all of the handling for the various
+        commands available to the user. It also initializes windows and the figure on first run
+        (could be a separate 'init' function). 
+"""
 def dsp_cli():
     """
         Initialize plot, windows, and other variables for faster runtime.
@@ -265,8 +282,10 @@ def dsp_cli():
         'smallest',
     ]
 
+    # Default directory to store saved figures to
     fig_dir = 'Figures/'
 
+    # Contains available filters
     filter_types = [
         'lowpass',
         'highpass',
@@ -277,6 +296,7 @@ def dsp_cli():
         'Chebyshev2': signal.cheby2,
     }
 
+    # Contains all horizontal/vertical lines so they can be removed later
     lines = {}
 
     #############################################
@@ -301,8 +321,14 @@ Options:
         print(help)
         cli_input = input('> ')  
         if (cli_input == 'q'):
+            """
+                Quit.
+            """
             break
         elif (cli_input == '1'):
+            """
+                Sets the x- and y-axis limits.
+            """
             print('Current limits:', axis_limits)
             try:
                 cli_limits = input('Enter limits \'x0, x1, y0, y1\': ').split(',')
@@ -314,6 +340,10 @@ Options:
                 print('Invalid entry...')
                 continue
         elif (cli_input == '2'):
+            """
+                Changes window function. 
+                Default is rectangular/none and other options are available in the x_n_windows dict.
+            """
             print('Window options:')
             for index, name in enumerate(x_n_windows.keys()):
                 print('\t%i. %s' % (index + 1, name))
@@ -327,6 +357,11 @@ Options:
                 print('Invalid entry...')
                 continue
         elif (cli_input == '3'):
+            """
+                Adds CFAR target detection threshold. 
+                This takes inputs for the parameters for the CFAR algorithm and calculates the 
+                threshold. Masking values below the threshold is optional.
+            """
             try:
                 cli_cfar_params = input('Enter CFAR parameters \'Num guard cells, num ref cells, bias\': ').split(',')
                 cli_cfar_params = list(map(lambda x : float(x), cli_cfar_params))
@@ -351,10 +386,18 @@ Options:
                 print('Invalid entry...')
                 continue
         elif (cli_input == '4'):
+            """
+                Remove the CFAR threshold and optional masking.
+            """
             # Remove CFAR method
             fig, ax, line1, line2, x_n, axis_limits, cfar_params = update_plot(fig, ax, line1, 
                 line2, x_n, axis_limits, None)
         elif (cli_input == '5'):
+            """
+                Add filtering to signal.
+                Current options only allow for low- and high-pass, but these can be used 
+                in combination to create the other two main filters: band and stop.
+            """
             print('Filter type options:')
             try:
                 for index, filter_type in enumerate(filter_types):
@@ -379,10 +422,18 @@ Options:
                 print('Invalid entry...')
                 continue
         elif (cli_input == '6'):
-            # Remove CFAR method
+            """
+                Remove filtering.
+            """
             fig, ax, line1, line2, x_n, axis_limits, cfar_params = update_plot(fig, ax, line1, 
                 line2, x_n_orig, axis_limits, None)
         elif (cli_input == '7'):
+            """
+                Toggle between frequency and range for the x-axis.
+                This is not perfect because it has to create new xticks and the time has
+                not put in to make it work very well. It is mostly affected when using a 
+                very small range as the xticks have a smallest increment of 10.
+            """
             if (curr_x_freq):
                 fig, ax, line1, line2, x_n, axis_limits, cfar_params = update_plot(fig, ax, 
                     line1, line2, x_n_orig, axis_limits, None, dist, xlabel='Distance [m]')
@@ -392,6 +443,9 @@ Options:
                     line1, line2, x_n_orig, axis_limits, None, freq, xlabel='Frequency [kHz]')
                 curr_x_freq = True
         elif (cli_input == '8'):
+            """
+                Add horizontal/vertical lines.
+            """
             try:
                 line_function = ax.axhline if input('Horizontal/vertical? (h/v): ') == 'h' else ax.axvline
                 line_coord = float(input('Input value to insert line: '))
@@ -401,18 +455,29 @@ Options:
                 print('Invalid entry...')
                 continue
         elif (cli_input == '9'):
-            for line in lines.values():
-                line.remove()
+            """
+                Remove horizontal/vertical lines.
+            """
+            for line in lines.copy():
+                lines.pop(line).remove()
+        elif (cli_input == '10'):
+            """
+                TODO : add functionality for beam-steering
+            """
+            pass
 
         elif (cli_input == 's'):
+            """
+                Save current figure to a figure of filename './{fig_dir}/{filename}.png'.
+            """
             cli_filename = input('Input filename (no extension): ')
             fig.savefig(fig_dir + cli_filename + '.png')
             print('Figure saved to: %s' % (fig_dir + cli_filename + '.png'))
         elif (cli_input == 'r'):
-            plt.close(fig)
-            dsp_cli()
-            break
-            
+            """
+                Collect and plot new buffer.
+            """
+            new_buffer()
 
 if __name__ == '__main__':
     cfar_params = {
