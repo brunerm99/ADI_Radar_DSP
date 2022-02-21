@@ -161,8 +161,16 @@ iq = 1 * (i + 1j * q)
 my_sdr._ctx.set_timeout(0)
 my_sdr.tx([iq*0, iq])  # only send data to the 2nd channel (that's all we need)
 
+phases_0 = np.zeros(8)
+phases_0[:4] = 15
+
 def plot_rx(realtime_plot=False, plot_dist=False, cfar_params=None, yaxis_limits=[20, 50],
-        masked=False):
+        masked=False, scanning=False):
+
+    if (scanning):
+        for i in range(phases_0.size):
+            my_phaser.set_chan_phase(i, phases_0[i])
+
     # Collect raw data buffer, take DFT, and do basic processing
     x_n = my_sdr.rx()
     x_n = x_n[0] + x_n[1]
@@ -275,8 +283,13 @@ if __name__ == '__main__':
         'bias': 2,
         'method': 'average',
     }
-    fig = plot_rx(False, False, yaxis_limits=[0, 70])
-    output_filename = 'test.png'
-    fig.savefig('Figures/' + output_filename)
+    fig1 = plot_rx(False, False, yaxis_limits=[0, 40], scanning=False)
+    fig1_fname = 'fig1.png'
+    fig1.savefig('Figures/' + fig1_fname)
+
+    fig2 = plot_rx(False, False, yaxis_limits=[0, 40], scanning=True)
+    fig2_fname = 'fig2.png'
+    fig2.savefig('Figures/' + fig2_fname)
 
     # create_figures(10, 30, 2)
+    # plot_rx(True, True, yaxis_limits=[0, 40], cfar_params=cfar_params, scanning=True)
