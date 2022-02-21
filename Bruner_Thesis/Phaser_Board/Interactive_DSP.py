@@ -7,16 +7,20 @@
 from mimetypes import init
 import time
 import matplotlib.pyplot as plt
-import numpy as np
 import faulthandler
 faulthandler.enable()
 
 # Signal processing stuff
-from scipy import signal
-from scipy.signal import windows
+import numpy as np
 from numpy.fft import fft, ifft, fftshift, fftfreq
 from numpy import absolute, pi
+from scipy import signal
+from scipy.signal import windows
 from target_detection import cfar
+
+# Import settings
+# Ignore divide by zero for np.log10(*)
+np.seterr(divide='ignore')
 
 import adi
 
@@ -80,6 +84,8 @@ my_sdr.tx_hardwaregain_chan1 = -0   # must be between 0 and -88
 
 # Configure the ADF4159 Rampling PLL
 output_freq = 12.1e9
+c = 3e8
+wavelength = c / output_freq
 BW = 500e6
 num_steps = 1000
 ramp_time = 1e3 # us
@@ -160,18 +166,18 @@ def init_plot(cfar_params=None, axis_limits=[-sample_rate / 2e3, sample_rate / 2
     slope = BW / ramp_time_s
     dist = (c / slope) * freq
 
-    line1, = ax.plot(freq_kHz, 10 * np.log10(X_k), c='b', label="Received targets")
+    line1, = ax.plot(freq_kHz, 10 * np.log10(abs(X_k)), c='b', label="Received targets")
 
     # CFAR plot placeholder
     cfar_placeholder = np.ma.masked_all(X_k.shape)
-    line2, = ax.plot(freq_kHz, 10 * np.log10(cfar_placeholder), c='r', label='CFAR Threshold')
+    line2, = ax.plot(freq_kHz, 10 * np.log10(abs(cfar_placeholder)), c='r', label='CFAR Threshold')
 
     # Update plot
     fig.canvas.flush_events()
     fig.canvas.draw()
 
-    line1.set_ydata(10 * np.log10(X_k))
-    line2.set_ydata(10 * np.log10(cfar_placeholder))
+    line1.set_ydata(10 * np.log10(abs(X_k)))
+    line2.set_ydata(10 * np.log10(abs(cfar_placeholder)))
 
     # Update plot
     fig.canvas.flush_events()
@@ -198,15 +204,15 @@ def update_plot(fig, ax, line1, line2, x_n, axis_limits, cfar_params=None, xdata
             cfar_params['num_ref_cells'], cfar_params['bias'], cfar_params['method'])
         if (cfar_params['mask']):
             X_k = targets_only
-        line1.set_ydata(10 * np.log10(X_k))
-        line2.set_ydata(10 * np.log10(cfar_values))
+        line1.set_ydata(10 * np.log10(abs(X_k)))
+        line2.set_ydata(10 * np.log10(abs(cfar_values)))
         ax.set_title("Received Signal - Frequency Domain\nCFAR Method: %s" % 
             (cfar_params['method']), fontsize=24)
         ax.legend(fontsize=18, loc='upper left')
     else:
         ax.set_title("Received Signal - Frequency Domain", fontsize=24)
-        line1.set_ydata(10 * np.log10(X_k))
-        line2.set_ydata(10 * np.log10(np.ma.masked_all(X_k.shape)))
+        line1.set_ydata(10 * np.log10(abs(X_k)))
+        line2.set_ydata(np.ma.masked_all(X_k.shape))
         try:
             ax.get_legend().remove()
         except:
@@ -239,7 +245,7 @@ def update_plot(fig, ax, line1, line2, x_n, axis_limits, cfar_params=None, xdata
 
     return fig, ax, line1, line2, x_n, axis_limits, cfar_params
 
-def new_buffer():
+def new_buffer(fig, ax, line1, line2, axis_limits):
     print('Collecting new buffer...', end='')
     # Collect raw data buffer, take DFT, and do basic processing
     x_n = my_sdr.rx()
@@ -248,6 +254,34 @@ def new_buffer():
 
     fig, ax, line1, line2, x_n, axis_limits, cfar_params = update_plot(fig, ax, 
         line1, line2, x_n, axis_limits, None)
+
+"""
+    update_phases()
+    Description: Updates each channel's phase depending on an input scan angle.
+    @param my_phaser: Phaser object to be modified.
+    @param scan_angle: Desired scan angle
+"""
+def update_phases(my_phaser, scan_angle):
+    num_devs = 2
+    num_channels = 4
+
+    # Calculate phase offsets from scan angle
+    phases_rad = np.arange(0, num_devs * num_channels, 1, dtype=float)
+    phase_diff = (2 * np.pi * output_freq * my_phaser.element_spacing *
+        np.sin(scan_angle * np.pi / 180)) / my_phaser.c
+    phases_rad *= phase_diff
+    phases_deg = np.degrees(phases_rad)
+    # print(np.degrees(phases_rad))
+
+    # Update each channel with calculated phases
+    for dev_index, (dev_name, dev_obj) in enumerate(my_phaser.devices.items()):
+        for channel_index, channel in enumerate(dev_obj.channels):
+            # print('Old: %i-%i: %0.4f degrees' % (dev_index, channel_index, channel.rx_phase))
+            channel.rx_phase = phases_deg[(dev_index * num_channels) + channel_index]
+            # print('New: %i-%i: %0.4f degrees' % (dev_index, channel_index, channel.rx_phase), 
+                # end='\n\n')
+            dev_obj.latch_rx_settings()
+
 
 
 """
@@ -303,18 +337,20 @@ def dsp_cli():
 
     help = """
 Options:
-    1. Set axis limits
-    2. Change window function
-    3. CFAR
-    4. Remove CFAR threshold
-    5. Filter
-    6. Remove filter
-    7. Toggle x-axis (frequency/distance)
-    8. Add horizontal/vertical line
-    9. Remove horizontal/vertical lines
-    s. Save figure as PNG
-    r. Reload
-    q. Quit
+    1.\tSet axis limits
+    2.\tChange window function
+    3.\tCFAR
+    4.\tRemove CFAR threshold
+    5.\tFilter
+    6.\tRemove filter
+    7.\tToggle x-axis (frequency/distance)
+    8.\tAdd horizontal/vertical line
+    9.\tRemove horizontal/vertical lines
+    10.\tBeam-steering
+    11.\tScan multiple points between 2 angles
+    s.\tSave figure as PNG
+    r.\tReload
+    q.\tQuit
 """
 
     while (True):
@@ -462,9 +498,39 @@ Options:
                 lines.pop(line).remove()
         elif (cli_input == '10'):
             """
-                TODO : add functionality for beam-steering
+                TODO: INCOMPLETE
+                Calculates phase angles from desired scan angle and sets channel phases.
             """
-            pass
+            try:
+                cli_scan_angle = float(input('Enter desired scan angle [degrees]: '))
+                update_phases(my_phaser, cli_scan_angle)
+            except:
+                print('Invalid entry...')
+                continue
+
+        elif (cli_input == '11'):
+            """
+                Scan between 2 angles. 
+            """
+            try:
+                cli_scan_extremes = input('Enter min and max scan angles (min, max) [degrees]: ').split(',')
+                scan_min = float(cli_scan_extremes[0])
+                scan_max = float(cli_scan_extremes[1])
+                cli_num_angles = int(input('Enter number of scan angles in the range: '))
+                cli_interval_time = float(input('Input time between samples [s]: '))
+                scan_angles = np.linspace(scan_min, scan_max, cli_num_angles)
+                for scan_angle in scan_angles:
+                    print('Setting angle: %0.4f' % scan_angle)
+                    update_phases(my_phaser, scan_angle)
+                    new_buffer(fig, ax, line1, line2, axis_limits)
+                    time.sleep(cli_interval_time)
+                
+                # Reset to 0 degrees
+                update_phases(my_phaser, 0)
+                new_buffer(fig, ax, line1, line2, axis_limits)
+            except:
+                print('Invalid entry...')
+                continue
 
         elif (cli_input == 's'):
             """
@@ -477,7 +543,7 @@ Options:
             """
                 Collect and plot new buffer.
             """
-            new_buffer()
+            new_buffer(fig, ax, line1, line2, axis_limits)
 
 if __name__ == '__main__':
     cfar_params = {
