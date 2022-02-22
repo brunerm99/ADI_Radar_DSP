@@ -133,7 +133,7 @@ my_sdr.rx_buffer_size = buffer_size
 print("buffer_time:", buffer_time, " ms")  
 
 # DDS send data (either do this or the Tx Method -- not both)
-#my_sdr.dds_single_tone(int(3e6), 0.9, 0)   # my_sdr.dds_single_tone(tone_freq_hz, tone_scale, tx_channel)
+# my_sdr.dds_single_tone(int(3e6), 0.9, 0)   # my_sdr.dds_single_tone(tone_freq_hz, tone_scale, tx_channel)
 
 # Create a sinewave waveform
 fs = int(my_sdr.sample_rate)
@@ -148,9 +148,9 @@ iq = 1 * (i + 1j * q)
 
 # Send data
 my_sdr._ctx.set_timeout(30000)
-my_sdr.tx([iq*0, iq])  # only send data to the 2nd channel (that's all we need)
+# my_sdr.tx([iq*0, iq])  # only send data to the 2nd channel (that's all we need)
 
-my_sdr.tx
+# my_sdr.tx
 # Collect data
 for r in range(5):    # grab several buffers to let the AGC settle
     data = my_sdr.rx()
