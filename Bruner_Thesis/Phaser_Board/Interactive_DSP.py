@@ -46,15 +46,20 @@ except NameError:
     my_phaser = adi.CN0566(uri=rpi_ip, rx_dev=my_sdr)
 
 # Initialize both ADAR1000s, set gains to max, and all phases to 0
+max_phaser_gain = int(2**7 - 1)
 my_phaser.configure(device_mode="rx")
 for i in range(0, 8):
-    my_phaser.set_chan_gain(i, 127)
+    my_phaser.set_chan_gain(i, max_phaser_gain)
     my_phaser.set_chan_phase(i, 0)
 
 
+# ADAR1000 devices and channels for each
+num_devs = 2
+num_channels = 4
+
 sample_rate = 0.6e6
 center_freq = 2.1e9
-signal_freq = 100e3
+signal_freq = 200e3
 num_slices = 200
 fft_size = 1024*16
 # fft_size = 2**10
@@ -122,21 +127,23 @@ Output frequency: {output_freq}MHz
     BW=BW / 1e6, ramp_time=ramp_time / 1e3, output_freq=output_freq / 1e6))
 
 # Create a sinewave waveform
-fs = int(my_sdr.sample_rate)
-print("sample_rate:", fs)
-N = int(my_sdr.rx_buffer_size)
-fc = int(signal_freq / (fs / N)) * (fs / N)
-ts = 1 / float(fs)
-t = np.arange(0, N * ts, ts)
-i = np.cos(2 * np.pi * t * fc) * 2 ** 14
-q = np.sin(2 * np.pi * t * fc) * 2 ** 14
-iq = 1 * (i + 1j * q)
+# fs = int(my_sdr.sample_rate)
+# print("sample_rate:", fs)
+# N = int(my_sdr.rx_buffer_size)
+# fc = int(signal_freq / (fs / N)) * (fs / N)
+# ts = 1 / float(fs)
+# t = np.arange(0, N * ts, ts)
+# i = np.cos(2 * np.pi * t * fc) * 2 ** 14
+# q = np.sin(2 * np.pi * t * fc) * 2 ** 14
+# iq = 1 * (i + 1j * q)
 
-# Send data
-my_sdr._ctx.set_timeout(0)
-my_sdr.tx([iq*0, iq])  # only send data to the 2nd channel (that's all we need)
+# # Send data
+# my_sdr._ctx.set_timeout(0)
+# my_sdr.tx([iq*0, iq])  # only send data to the 2nd channel (that's all we need)
 
-def init_plot(cfar_params=None, axis_limits=[-sample_rate / 2e3, sample_rate / 2e3, 20, 50], 
+my_sdr.dds_single_tone(int(signal_freq), 0.9, channel=1)
+
+def init_plot(cfar_params=None, axis_limits=[-sample_rate / 2e3, sample_rate / 2e3, 0, 70], 
     masked=False):
     # Collect raw data buffer, take DFT, and do basic processing
     x_n = my_sdr.rx()
@@ -261,10 +268,7 @@ def new_buffer(fig, ax, line1, line2, axis_limits):
     @param my_phaser: Phaser object to be modified.
     @param scan_angle: Desired scan angle
 """
-def update_phases(my_phaser, scan_angle):
-    num_devs = 2
-    num_channels = 4
-
+def update_phases(my_phaser, scan_angle, num_devs=2, num_channels=4):
     # Calculate phase offsets from scan angle
     phases_rad = np.arange(0, num_devs * num_channels, 1, dtype=float)
     phase_diff = (2 * np.pi * output_freq * my_phaser.element_spacing *
@@ -272,6 +276,8 @@ def update_phases(my_phaser, scan_angle):
     phases_rad *= phase_diff
     phases_deg = np.degrees(phases_rad)
     # print(np.degrees(phases_rad))
+
+    # TODO add gain tapering and phase calibration offset
 
     # Update each channel with calculated phases
     for dev_index, (dev_name, dev_obj) in enumerate(my_phaser.devices.items()):
@@ -282,7 +288,20 @@ def update_phases(my_phaser, scan_angle):
                 # end='\n\n')
             dev_obj.latch_rx_settings()
 
-
+"""
+    update_gains()
+    Description: Updates each channel's gain given a taper values.
+    @param my_phaser: Phaser object to be modified.
+    @param taper: Gain taper values for all elements + 2
+"""
+def update_gains(my_phaser, taper):
+    for dev_index, (dev_name, dev_obj) in enumerate(my_phaser.devices.items()):
+        for channel_index, channel in enumerate(dev_obj.channels):
+            print('Old: %i-%i: %0.4f' % (dev_index, channel_index, channel.rx_gain))
+            channel.rx_gain = max_phaser_gain * taper[(dev_index * num_channels) + channel_index]
+            print('New: %i-%i: %0.4f' % (dev_index, channel_index, channel.rx_gain), 
+                end='\n\n')
+            dev_obj.latch_rx_settings()
 
 """
     dsp_cli()
@@ -294,10 +313,11 @@ def dsp_cli():
     """
         Initialize plot, windows, and other variables for faster runtime.
     """
+
     print('Initializing plot...', end='')
     fig, ax, line1, line2, x_n, axis_limits, cfar_params, freq, dist = init_plot()
     curr_x_freq = True
-    x_n_orig = x_n
+    x_n_orig = np.copy(x_n)
     print('Done')
 
     print('Pre-loading window functions...', end='')
@@ -307,6 +327,18 @@ def dsp_cli():
         'Hanning'       : x_n * windows.hann(N),
         'Hamming'       : x_n * windows.hamming(N),
         'Blackman'      : x_n * windows.blackman(N),
+    }
+    print('Done')
+
+    # Create gain taper functions with 2 extra elements for Hanning windows so that 
+    # no elements are wasted having 0 gain.
+    print('Pre-loading taper functions...', end='')
+    tapers = {
+        'Rectangular'   : np.ones(num_devs * num_channels),
+        'Hanning'       : windows.hann(num_devs * num_channels + 2)[1:num_devs * num_channels + 1],
+        'Hamming'       : windows.hamming(num_devs * num_channels),
+        'Blackman'      : windows.blackman(num_devs * num_channels + 2)[1:num_devs * num_channels + 1],
+        'Taylor'        : windows.taylor(num_devs * num_channels, nbar=4),
     }
     print('Done')
 
@@ -323,6 +355,8 @@ def dsp_cli():
     filter_types = [
         'lowpass',
         'highpass',
+        'bandpass',
+        'bandstop',
     ]
 
     filters = {
@@ -348,6 +382,7 @@ Options:
     9.\tRemove horizontal/vertical lines
     10.\tBeam-steering
     11.\tScan multiple points between 2 angles
+    12.\tGain tapering
     s.\tSave figure as PNG
     r.\tReload
     q.\tQuit
@@ -403,7 +438,7 @@ Options:
                 cli_cfar_params = list(map(lambda x : float(x), cli_cfar_params))
                 print('CFAR method options:')
                 for index, method in enumerate(cfar_methods):
-                    print('\t%i. %s' % (index + 1, method))
+                    print('\t%i. %s' % (index + 1, method.title()))
                 cli_cfar_method = input('> ')
                 cli_mask = input('Mask values below threshold? y/n: ')
                 cli_mask = True if cli_mask == 'y' else False
@@ -439,7 +474,11 @@ Options:
                 for index, filter_type in enumerate(filter_types):
                     print('\t%i. %s' % (index + 1, filter_type.title()))
                 cli_filter_type = filter_types[int(input('> ')) - 1]
-                cli_cutoff = int(input('Enter cutoff frequency [Hz]: '))
+
+                # Get cutoff(s) and create a tuple of floats
+                cli_cutoff = input('Enter cutoff frequency(-ies) [Hz]: ').split(',')
+                cutoff = tuple(map(lambda x : float(x), cli_cutoff))
+
                 cli_rp = int(input('Enter maximum ripple [dB]: '))
                 cli_filter_order = int(input('Enter filter order: '))
 
@@ -448,9 +487,9 @@ Options:
                     print('\t%i. %s' % (index + 1, name))
                 cli_filter = int(input('> ')) - 1
                 fs = int(sample_rate)
-                print(cli_filter_order, cli_rp, cli_cutoff, cli_filter_type, fs)
+                print(cli_filter_order, cli_rp, cutoff, cli_filter_type, fs)
                 sos = filters[list(filters.keys())[cli_filter]](cli_filter_order, 
-                    cli_rp, cli_cutoff, btype=cli_filter_type, fs=fs, output='sos')
+                    cli_rp, cutoff, btype=cli_filter_type, fs=fs, output='sos')
                 x_n_filtered = signal.sosfilt(sos, x_n)
                 fig, ax, line1, line2, x_n, axis_limits, cfar_params = update_plot(fig, ax, line1, 
                     line2, x_n_filtered, axis_limits, cfar_params)
@@ -498,19 +537,19 @@ Options:
                 lines.pop(line).remove()
         elif (cli_input == '10'):
             """
-                TODO: INCOMPLETE
                 Calculates phase angles from desired scan angle and sets channel phases.
             """
             try:
                 cli_scan_angle = float(input('Enter desired scan angle [degrees]: '))
                 update_phases(my_phaser, cli_scan_angle)
+                new_buffer(fig, ax, line1, line2, axis_limits)
             except:
                 print('Invalid entry...')
                 continue
 
         elif (cli_input == '11'):
             """
-                Scan between 2 angles. 
+                Scan between 2 angles.
             """
             try:
                 cli_scan_extremes = input('Enter min and max scan angles (min, max) [degrees]: ').split(',')
@@ -527,6 +566,22 @@ Options:
                 
                 # Reset to 0 degrees
                 update_phases(my_phaser, 0)
+                new_buffer(fig, ax, line1, line2, axis_limits)
+            except:
+                print('Invalid entry...')
+                continue
+
+        elif (cli_input == '12'):
+            """
+                Applies a gain taper to the array elements.
+            """
+            print('Taper options:')
+            try:
+                for index, taper_name in enumerate(tapers.keys()):
+                    print('\t%i. %s' % (index, taper_name))
+                cli_taper = int(input('> '))
+                taper = tapers[list(tapers.keys())[cli_taper - 1]]
+                update_gains(my_phaser, taper)
                 new_buffer(fig, ax, line1, line2, axis_limits)
             except:
                 print('Invalid entry...')
