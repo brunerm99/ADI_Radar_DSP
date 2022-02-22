@@ -240,55 +240,19 @@ def create_figures(num_guard_cells, num_ref_cells, bias, fig_dir='Figures/'):
 
 # %%
 
-x_n = my_sdr.rx()
-x_n = x_n[0] + x_n[1]
-N = x_n.size
-
-X_k = absolute(fft(x_n))
-X_k = fftshift(X_k)
-
 # Reduce size of data for quicker computation
-# Then downsample... if needed
 def reduce_array_size(arr, factor):
+    N = arr.size
     arr_rs = arr[int(N / 2):N]
     arr_rs = arr_rs[0:round(N / factor)]
     N_rs = arr_rs.size
     return arr_rs, N_rs
 
-# Create frequency axis
-freq = fftshift(fftfreq(N, 1 / sample_rate))
-freq_kHz = freq / 1e3
-
-X_k_rs, N_rs = reduce_array_size(X_k, 4)
-freq_rs, _ = reduce_array_size(freq, 4)
-
-# Create range-FFT scale
-c = 3e8
-slope = BW / ramp_time_s
-dist = (c / slope) * freq_rs # meters
-
-R_max = np.max(dist)
-
-# R_max = 150
-N_test = 20
-N_theta = 360
-
-fig = plt.figure()
-fig.set_figheight(8)
-fig.set_figwidth(8)
-
-ax = plt.subplot(111, polar=True)
-theta = np.linspace(0, 2 * pi, N_theta)
-ranges = np.linspace(1, R_max, N_rs)
-zdata = np.ma.masked_all((N_rs, N_theta))
-
-beamwidth = 20
-X_k_width = np.ma.masked_all((beamwidth, N_rs))
-X_k_width[:] = X_k_rs
-
-zdata[:,5] = X_k_rs
-
-pc = ax.pcolormesh(theta, ranges, zdata)
+# Down sample signal by a factor
+def downsample(arr, factor):
+    N = arr.size
+    arr_ds = signal.resample(arr, int(N / factor))
+    return arr_ds, arr_ds.size
 
 def polar_animation(frame):
     if (frame > int(beamwidth / 2)):
@@ -306,22 +270,68 @@ def polar_animation(frame):
         zdata[:,frame - int(beamwidth / 2):frame + int(beamwidth / 2)] = X_k_width.T
         pc.set_array(zdata)
 
-anim = animation.FuncAnimation(fig, polar_animation, round(N_theta / 2 - (beamwidth / 2)), interval=50, 
-    blit=False, repeat=True)
-plt.show()
+if __name__ == '__main__':
+    x_n = my_sdr.rx()
+    x_n = x_n[0] + x_n[1]
+    N = x_n.size
+
+    X_k = absolute(fft(x_n))
+    X_k = fftshift(X_k)
+
+
+    # Create frequency axis
+    freq = fftshift(fftfreq(N, 1 / sample_rate))
+    freq_kHz = freq / 1e3
+
+    X_k_rs, N_rs = reduce_array_size(X_k, 8)
+    freq_rs, _ = reduce_array_size(freq, 8)
+
+    # Create range-FFT scale
+    c = 3e8
+    slope = BW / ramp_time_s
+    dist = (c / slope) * freq_rs # meters
+
+    R_max = np.max(dist)
+
+    # R_max = 150
+    N_test = 20
+    N_theta = 360
+
+    fig = plt.figure()
+    fig.set_figheight(8)
+    fig.set_figwidth(8)
+
+    ax = plt.subplot(111, polar=True)
+    theta = np.linspace(0, 2 * pi, N_theta)
+    ranges = np.linspace(1, R_max, N_rs)
+    zdata = np.ma.masked_all((N_rs, N_theta))
+
+    beamwidth = 20
+    X_k_width = np.ma.masked_all((beamwidth, N_rs))
+    X_k_width[:] = X_k_rs
+
+    zdata[:,5] = X_k_rs
+
+    pc = ax.pcolormesh(theta, ranges, zdata)
+
+    anim = animation.FuncAnimation(fig, polar_animation, round(N_theta / 2 - (beamwidth / 2)), interval=50, 
+        blit=False, repeat=True)
+    plt.show()
+
+
 
 
 # Testing my data reduction...
-x_n = my_sdr.rx()
-x_n = x_n[0] + x_n[1]
+# x_n = my_sdr.rx()
+# x_n = x_n[0] + x_n[1]
 
-X_k = absolute(fft(x_n))
-X_k = fftshift(X_k)
+# X_k = absolute(fft(x_n))
+# X_k = fftshift(X_k)
 
-X_k_rs, _ = reduce_array_size(X_k, 4)
+# X_k_rs, _ = reduce_array_size(X_k, 4)
 
-X_k_width = np.ma.masked_all((beamwidth, N_rs))
-X_k_width[:] = X_k_rs
+# X_k_width = np.ma.masked_all((beamwidth, N_rs))
+# X_k_width[:] = X_k_rs
 
 # fig, ax = plt.subplots()
 # ax.plot(X_k_rs)
