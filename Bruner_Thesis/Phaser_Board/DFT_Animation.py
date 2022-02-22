@@ -201,7 +201,7 @@ def plot_rx(realtime_plot=False, plot_dist=False, cfar_params=None, yaxis_limits
         ax.set_xlabel("Distance [m]", fontsize=22)
         xaxis = dist
     else:
-        # ax.set_xlim([-30, 30])
+        ax.set_xlim([50, 150])
         ax.set_xlabel("Frequency [kHz]", fontsize=22)
         xaxis = freq_kHz
 
@@ -283,13 +283,13 @@ if __name__ == '__main__':
         'bias': 2,
         'method': 'average',
     }
-    fig1 = plot_rx(False, False, yaxis_limits=[0, 40], scanning=False)
-    fig1_fname = 'fig1.png'
-    fig1.savefig('Figures/' + fig1_fname)
+    # fig1 = plot_rx(False, False, yaxis_limits=[0, 40], scanning=False)
+    # fig1_fname = 'fig1.png'
+    # fig1.savefig('Figures/' + fig1_fname)
 
-    fig2 = plot_rx(False, False, yaxis_limits=[0, 40], scanning=True)
-    fig2_fname = 'fig2.png'
-    fig2.savefig('Figures/' + fig2_fname)
+    # fig2 = plot_rx(False, False, yaxis_limits=[0, 40], scanning=True)
+    # fig2_fname = 'fig2.png'
+    # fig2.savefig('Figures/' + fig2_fname)
 
     # create_figures(10, 30, 2)
-    # plot_rx(True, True, yaxis_limits=[0, 40], cfar_params=cfar_params, scanning=True)
+    plot_rx(True, False, yaxis_limits=[0, 75])# , cfar_params=cfar_params)
