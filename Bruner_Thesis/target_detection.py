@@ -35,6 +35,6 @@ def cfar(X_k, num_guard_cells, num_ref_cells, bias, cfar_method='average'):
         cfar_values[center_index] = output
 
     targets_only = np.copy(X_k)
-    targets_only[np.where(X_k < cfar_values)] = np.ma.masked
+    targets_only[np.where(abs(X_k) < abs(cfar_values))] = np.ma.masked
 
     return cfar_values, targets_only
