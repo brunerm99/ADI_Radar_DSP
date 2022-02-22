@@ -4,9 +4,14 @@
     doesn't include much yet. 
 """
 
+# Imports
 from mimetypes import init
+from re import L
 import time
 import matplotlib.pyplot as plt
+from netCDF_Functions import create_dataset
+from datetime import datetime
+
 import faulthandler
 faulthandler.enable()
 
@@ -59,7 +64,7 @@ num_channels = 4
 
 sample_rate = 0.6e6
 center_freq = 2.1e9
-signal_freq = 200e3
+signal_freq = 100e3
 num_slices = 200
 fft_size = 1024*16
 # fft_size = 2**10
@@ -113,6 +118,29 @@ my_phaser.tx_trig_en = 0             # start a ramp with TXdata
 # my_phaser.tx_trig_en = 1             # start a ramp with TXdata
 my_phaser.enable = 0                 # 0 = PLL enable.  Write this last to update all the registers
 
+# # Configure TDD controller
+# tdd = adi.tdd(sdr_ip)
+# tdd.frame_length_ms = 4    # each GPIO toggle is spaced 4ms apart
+# tdd.burst_count = 20       # there is a burst of 20 toggles, then off for a long time
+# tdd.rx_rf_ms = [0.5,0.6, 0, 0]    # each GPIO pulse will be 100us (0.6ms - 0.5ms).  And the first trigger will happen 0.5ms into the buffer
+# tdd.secondary = False
+# tdd.en = True
+
+# # buffer size needs to be greater than the frame_time
+# frame_time = tdd.frame_length_ms*tdd.burst_count/2
+# print("frame_time:", frame_time, "ms")
+# buffer_time = 0
+# power=12
+# while frame_time > buffer_time:     
+#     power=power+1
+#     buffer_size = int(2**power)
+#     buffer_time = buffer_size/my_sdr.sample_rate*1000
+#     if power==23:
+#         break     # max pluto buffer size is 2**23, but for tdd burst mode, set to 2**22
+# print("buffer_size:", buffer_size)
+# my_sdr.rx_buffer_size = buffer_size
+# print("buffer_time:", buffer_time, " ms")  
+
 """
     Print config
 """
@@ -138,7 +166,7 @@ Output frequency: {output_freq}MHz
 # iq = 1 * (i + 1j * q)
 
 # # Send data
-# my_sdr._ctx.set_timeout(0)
+my_sdr._ctx.set_timeout(0)
 # my_sdr.tx([iq*0, iq])  # only send data to the 2nd channel (that's all we need)
 
 my_sdr.dds_single_tone(int(signal_freq), 0.9, channel=1)
@@ -261,6 +289,7 @@ def new_buffer(fig, ax, line1, line2, axis_limits):
 
     fig, ax, line1, line2, x_n, axis_limits, cfar_params = update_plot(fig, ax, 
         line1, line2, x_n, axis_limits, None)
+    return fig, ax, line1, line2, x_n, axis_limits, cfar_params
 
 """
     update_phases()
@@ -277,7 +306,7 @@ def update_phases(my_phaser, scan_angle, num_devs=2, num_channels=4):
     phases_deg = np.degrees(phases_rad)
     # print(np.degrees(phases_rad))
 
-    # TODO add gain tapering and phase calibration offset
+    # TODO add phase calibration offset
 
     # Update each channel with calculated phases
     for dev_index, (dev_name, dev_obj) in enumerate(my_phaser.devices.items()):
@@ -289,6 +318,7 @@ def update_phases(my_phaser, scan_angle, num_devs=2, num_channels=4):
             dev_obj.latch_rx_settings()
 
 """
+    TODO: check if max Rx gain is actually 70 rather than 127
     update_gains()
     Description: Updates each channel's gain given a taper values.
     @param my_phaser: Phaser object to be modified.
@@ -384,6 +414,7 @@ Options:
     11.\tScan multiple points between 2 angles
     12.\tGain tapering
     s.\tSave figure as PNG
+    n.\tSave data as netCDF file
     r.\tReload
     q.\tQuit
 """
@@ -542,7 +573,8 @@ Options:
             try:
                 cli_scan_angle = float(input('Enter desired scan angle [degrees]: '))
                 update_phases(my_phaser, cli_scan_angle)
-                new_buffer(fig, ax, line1, line2, axis_limits)
+                fig, ax, line1, line2, x_n, axis_limits, cfar_params = new_buffer(fig, 
+                    ax, line1, line2, axis_limits)
             except:
                 print('Invalid entry...')
                 continue
@@ -561,12 +593,14 @@ Options:
                 for scan_angle in scan_angles:
                     print('Setting angle: %0.4f' % scan_angle)
                     update_phases(my_phaser, scan_angle)
-                    new_buffer(fig, ax, line1, line2, axis_limits)
+                    fig, ax, line1, line2, x_n, axis_limits, cfar_params = new_buffer(fig, 
+                        ax, line1, line2, axis_limits)
                     time.sleep(cli_interval_time)
                 
                 # Reset to 0 degrees
                 update_phases(my_phaser, 0)
-                new_buffer(fig, ax, line1, line2, axis_limits)
+                fig, ax, line1, line2, x_n, axis_limits, cfar_params = new_buffer(fig, 
+                    ax, line1, line2, axis_limits)
             except:
                 print('Invalid entry...')
                 continue
@@ -582,7 +616,8 @@ Options:
                 cli_taper = int(input('> '))
                 taper = tapers[list(tapers.keys())[cli_taper - 1]]
                 update_gains(my_phaser, taper)
-                new_buffer(fig, ax, line1, line2, axis_limits)
+                fig, ax, line1, line2, x_n, axis_limits, cfar_params = new_buffer(fig, 
+                    ax, line1, line2, axis_limits)
             except:
                 print('Invalid entry...')
                 continue
@@ -594,11 +629,34 @@ Options:
             cli_filename = input('Input filename (no extension): ')
             fig.savefig(fig_dir + cli_filename + '.png')
             print('Figure saved to: %s' % (fig_dir + cli_filename + '.png'))
+        elif (cli_input == 'n'):
+            # try:
+            cli_time_samples = int(input('Enter quantity of time samples to take: '))
+            cli_filename = input('Input filename (no extension): ')
+
+            old_time = datetime.now()
+            temp_data = np.zeros((cli_time_samples, N), dtype=complex)
+            for temp_time in range(cli_time_samples):
+                temp_data[temp_time,:] = x_n
+                fig, ax, line1, line2, x_n, axis_limits, cfar_params = new_buffer(fig, 
+                    ax, line1, line2, axis_limits)
+                new_time = datetime.now()
+                print(new_time - old_time)
+                old_time = new_time
+            create_dataset(cli_filename + '.nc', temp_data, N, 2**12)
+            
+            print('Figure saved to: %s' % (fig_dir + cli_filename + '.nc'))
+            # except:
+            #     print('Invalid entry...')
+            #     continue
+
+
         elif (cli_input == 'r'):
             """
                 Collect and plot new buffer.
             """
-            new_buffer(fig, ax, line1, line2, axis_limits)
+            fig, ax, line1, line2, x_n, axis_limits, cfar_params = new_buffer(fig, 
+                ax, line1, line2, axis_limits)
 
 if __name__ == '__main__':
     cfar_params = {
