@@ -1,7 +1,6 @@
 """
     This is a CLI tool to test out different combinations of windows, filters, thresholding, etc.
-    without having to modify code and rerun everytime. I am still actively working on it, so it
-    doesn't include much yet. 
+    without having to modify code and rerun everytime. 
 """
 
 # Imports
@@ -30,6 +29,9 @@ np.seterr(divide='ignore')
 import adi
 
 
+"""
+    Initialize device and setup
+"""
 # Instantiate all the Devices
 rpi_ip = "ip:phaser.local"  # IP address of the Raspberry Pi
 sdr_ip = "ip:192.168.2.1" # "192.168.2.1, or pluto.local"  # IP address of the Transreceiver Block
@@ -156,7 +158,9 @@ Output frequency: {output_freq}MHz
 """.format(sample_rate=sample_rate / 1e6, Nlog2=int(np.log2(fft_size)), 
     BW=BW / 1e6, ramp_time=ramp_time / 1e3, output_freq=output_freq / 1e6))
 
-# Create a sinewave waveform
+"""
+    Transmit an IQ signal
+"""
 fs = int(my_sdr.sample_rate)
 print("sample_rate:", fs)
 N = int(my_sdr.rx_buffer_size)
@@ -171,8 +175,14 @@ iq = 1 * (i + 1j * q)
 my_sdr._ctx.set_timeout(0)
 my_sdr.tx([iq*0.5, iq])  # only send data to the 2nd channel (that's all we need)
 
-# my_sdr.dds_single_tone(int(signal_freq), 0.9, channel=1)
-
+"""
+    init_plot()
+    Description: Initializes plot to be updated later.
+    @param cfar_params  : num_guard_cells, num_ref_cells, bias, method
+    @param axis_limits  : [x0, x1, y0, y1]
+    @param masked       : Mask values below threshold?
+    returns fig, ax, lines, x_n, axis_limits, cfar_params, dist, freq
+"""
 def init_plot(cfar_params=None, axis_limits=[-sample_rate / 2e3, sample_rate / 2e3, 0, 70], 
     masked=False):
     # Collect raw data buffer, take DFT, and do basic processing
@@ -222,6 +232,14 @@ def init_plot(cfar_params=None, axis_limits=[-sample_rate / 2e3, sample_rate / 2
 
     return fig, ax, line1, line2, x_n, axis_limits, cfar_params, freq_kHz, dist
 
+"""
+    update_plot()
+    Description: Updates existing plot.
+    @param cfar_params  : num_guard_cells, num_ref_cells, bias, method
+    @param axis_limits  : [x0, x1, y0, y1]
+    @param others
+    returns fig, ax, lines, x_n, axis_limits, cfar_params, dist, freq
+"""
 def update_plot(fig, ax, line1, line2, x_n, axis_limits, cfar_params=None, xdata=np.array([]),
     xlabel=None):
     X_k = absolute(fft(x_n))
