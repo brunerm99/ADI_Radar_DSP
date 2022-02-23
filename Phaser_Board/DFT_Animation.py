@@ -159,7 +159,7 @@ iq = 1 * (i + 1j * q)
 
 # Send data
 my_sdr._ctx.set_timeout(0)
-my_sdr.tx([iq*0, iq])  # only send data to the 2nd channel (that's all we need)
+my_sdr.tx([iq*0.5, iq])  # only send data to the 2nd channel (that's all we need)
 
 phases_0 = np.zeros(8)
 phases_0[:4] = 15
