@@ -1,4 +1,0 @@
-Rx1_Phase_Cal = 0
-Rx2_Phase_Cal = -31.689423809657335
-Rx3_Phase_Cal = 12.359257988939504
-Rx4_Phase_Cal = 44.04868179859684
