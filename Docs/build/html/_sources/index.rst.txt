@@ -9,8 +9,9 @@ Welcome to Phaser Processing's documentation!
 .. toctree::
    :maxdepth: 2
    :caption: Contents:
-
-   testpage
+   :glob:
+   
+   Detection_Methods/*
 
 
 

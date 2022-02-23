@@ -78,7 +78,7 @@ my_sdr.tx_lo = int(5.5e9)
 my_sdr.tx_enabled_channels = [0, 1]
 my_sdr.tx_cyclic_buffer = True      # must set cyclic buffer to true for the tdd burst mode.  Otherwise Tx will turn on and off randomly
 my_sdr.tx_hardwaregain_chan0 = -88   # must be between 0 and -88
-my_sdr.tx_hardwaregain_chan1 = -40   # must be between 0 and -88
+my_sdr.tx_hardwaregain_chan1 = -0   # must be between 0 and -88
 
 # Read properties
 print("RX LO %s" % (my_sdr.rx_lo))
@@ -111,7 +111,7 @@ my_phaser.enable = 0                 # 0 = PLL enable.  Write this last to updat
 
 # Configure TDD controller
 tdd = adi.tdd(sdr_ip)
-tdd.frame_length_ms = 4    # each GPIO toggle is spaced 4ms apart
+tdd.frame_length_ms = 4    # each GPIO toggle is spaced 4ms apart, 
 tdd.burst_count = 20       # there is a burst of 20 toggles, then off for a long time
 tdd.rx_rf_ms = [0.5,0.6, 0, 0]    # each GPIO pulse will be 100us (0.6ms - 0.5ms).  And the first trigger will happen 0.5ms into the buffer
 tdd.secondary = False

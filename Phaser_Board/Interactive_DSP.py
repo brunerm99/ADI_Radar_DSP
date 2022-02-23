@@ -123,27 +123,27 @@ my_phaser.enable = 0                 # 0 = PLL enable.  Write this last to updat
 """
     Configure TDD controller
 """
-# tdd = adi.tdd(sdr_ip)
-# tdd.frame_length_ms = 4    # each GPIO toggle is spaced 4ms apart
-# tdd.burst_count = 20       # there is a burst of 20 toggles, then off for a long time
-# tdd.rx_rf_ms = [0.5,0.6, 0, 0]    # each GPIO pulse will be 100us (0.6ms - 0.5ms).  And the first trigger will happen 0.5ms into the buffer
-# tdd.secondary = False
-# tdd.en = True
+tdd = adi.tdd(sdr_ip)
+tdd.frame_length_ms = 4    # each GPIO toggle is spaced 4ms apart
+tdd.burst_count = 20       # there is a burst of 20 toggles, then off for a long time
+tdd.rx_rf_ms = [0.5,0.6, 0, 0]    # each GPIO pulse will be 100us (0.6ms - 0.5ms).  And the first trigger will happen 0.5ms into the buffer
+tdd.secondary = False
+tdd.en = True
 
-# # buffer size needs to be greater than the frame_time
-# frame_time = tdd.frame_length_ms*tdd.burst_count/2
-# print("frame_time:", frame_time, "ms")
-# buffer_time = 0
-# power=12
-# while frame_time > buffer_time:     
-#     power=power+1
-#     buffer_size = int(2**power)
-#     buffer_time = buffer_size/my_sdr.sample_rate*1000
-#     if power==23:
-#         break     # max pluto buffer size is 2**23, but for tdd burst mode, set to 2**22
-# print("buffer_size:", buffer_size)
-# my_sdr.rx_buffer_size = buffer_size
-# print("buffer_time:", buffer_time, " ms")  
+# buffer size needs to be greater than the frame_time
+frame_time = tdd.frame_length_ms*tdd.burst_count/2
+print("frame_time:", frame_time, "ms")
+buffer_time = 0
+power=12
+while frame_time > buffer_time:     
+    power=power+1
+    buffer_size = int(2**power)
+    buffer_time = buffer_size/my_sdr.sample_rate*1000
+    if power==23:
+        break     # max pluto buffer size is 2**23, but for tdd burst mode, set to 2**22
+print("buffer_size:", buffer_size)
+my_sdr.rx_buffer_size = buffer_size
+print("buffer_time:", buffer_time, " ms")  
 
 """
     Print config
