@@ -110,6 +110,10 @@ ax1.plot(time * 1e3, x_n_2_filt, c='r', label='t=1')
 ax1.set_xlabel('Time [ms]', fontsize=22)
 
 # %%
+"""
+	Calculate cross-correlation between different times then from the phase shift
+	calculate target velocity.
+"""
 # Cross correlation between different times
 corr = signal.correlate(x_n_1_filt, x_n_2_filt, mode='full')
 lags = signal.correlation_lags(N, N, mode='full')
