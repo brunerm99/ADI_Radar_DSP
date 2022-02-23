@@ -118,7 +118,9 @@ my_phaser.tx_trig_en = 0             # start a ramp with TXdata
 # my_phaser.tx_trig_en = 1             # start a ramp with TXdata
 my_phaser.enable = 0                 # 0 = PLL enable.  Write this last to update all the registers
 
-# # Configure TDD controller
+"""
+    Configure TDD controller
+"""
 # tdd = adi.tdd(sdr_ip)
 # tdd.frame_length_ms = 4    # each GPIO toggle is spaced 4ms apart
 # tdd.burst_count = 20       # there is a burst of 20 toggles, then off for a long time
@@ -155,21 +157,21 @@ Output frequency: {output_freq}MHz
     BW=BW / 1e6, ramp_time=ramp_time / 1e3, output_freq=output_freq / 1e6))
 
 # Create a sinewave waveform
-# fs = int(my_sdr.sample_rate)
-# print("sample_rate:", fs)
-# N = int(my_sdr.rx_buffer_size)
-# fc = int(signal_freq / (fs / N)) * (fs / N)
-# ts = 1 / float(fs)
-# t = np.arange(0, N * ts, ts)
-# i = np.cos(2 * np.pi * t * fc) * 2 ** 14
-# q = np.sin(2 * np.pi * t * fc) * 2 ** 14
-# iq = 1 * (i + 1j * q)
+fs = int(my_sdr.sample_rate)
+print("sample_rate:", fs)
+N = int(my_sdr.rx_buffer_size)
+fc = int(signal_freq / (fs / N)) * (fs / N)
+ts = 1 / float(fs)
+t = np.arange(0, N * ts, ts)
+i = np.cos(2 * np.pi * t * fc) * 2 ** 14
+q = np.sin(2 * np.pi * t * fc) * 2 ** 14
+iq = 1 * (i + 1j * q)
 
-# # Send data
+# Send data
 my_sdr._ctx.set_timeout(0)
-# my_sdr.tx([iq*0, iq])  # only send data to the 2nd channel (that's all we need)
+my_sdr.tx([iq*0.5, iq])  # only send data to the 2nd channel (that's all we need)
 
-my_sdr.dds_single_tone(int(signal_freq), 0.9, channel=1)
+# my_sdr.dds_single_tone(int(signal_freq), 0.9, channel=1)
 
 def init_plot(cfar_params=None, axis_limits=[-sample_rate / 2e3, sample_rate / 2e3, 0, 70], 
     masked=False):
