@@ -14,8 +14,8 @@ import matplotlib.pyplot as plt
 from scipy import signal
 from target_detection import cfar
 
-from matplotlib import style
-style.use('seaborn-dark')
+# from matplotlib import style
+# style.use('seaborn-dark')
 
 import netCDF4 as nc
 
@@ -106,15 +106,27 @@ ax2.set_xlim([-150, 150])
 ax2.set_xlabel('Frequency [kHz]', fontsize=22)
 
 # %%
+# Normalize to remove amplitude interference
+x_n_1_filt /= np.max(x_n_1_filt)
+x_n_2_filt /= np.max(x_n_2_filt)
+
+# %%
 """
 	Plot filtered time domain
 """
 fig, ax1 = plt.subplots()
 fig.set_figheight(8)
 fig.set_figwidth(16)
-ax1.plot(time * 1e3, x_n_1_filt, c='b', label='t=0')
-ax1.plot(time * 1e3, x_n_2_filt, c='r', label='t=1')
+ax1.set_title('Subsequently Received Signals - Time Domain\n$T_{diff}=%0.2f$ms' % 
+	(time_diff * 1e3), fontsize=24)
+ax1.plot(time * 1e3, x_n_2_filt, c='r', label='$t_0+T_{diff}$')
+ax1.plot(time * 1e3, x_n_1_filt, c='b', label='$t_0$')
 ax1.set_xlabel('Time [ms]', fontsize=22)
+ax1.set_ylabel('Amplitude', fontsize=22)
+ax1.legend(loc='upper left', fontsize='16')
+
+# %%
+fig.savefig('Figures/Subsequent_Signals_Overlayed')
 
 # %%
 """
@@ -137,12 +149,16 @@ recovered_phase_shift = 2 * pi * (((0.5 + recovered_time_shift * f) % 1.0) - 0.5
 fig, ax = plt.subplots()
 fig.set_figheight(8)
 fig.set_figwidth(16)
+ax.set_title('Cross-correlation Between Subsequent Buffers\n$T_{diff}=13.65$ms', fontsize=24)
+ax.set_xlabel('Lag', fontsize=22)
+ax.set_ylabel('Amplitude', fontsize=22)
 
 ax.axvline(lag_max, c='r', linestyle='dashed', label='Phase shift: %0.2f$\pi$' % 
     (recovered_phase_shift / pi))
 ax.legend(loc='upper right', fontsize=16)
 
 ax.plot(lags, corr, label='a')
+fig.savefig('Figures/Cross_Correlation_Subsequent_Signals')
 
 # Print corresponding velocity
 V_r = (wavelength * recovered_phase_shift) / (4 * pi * time_diff)
