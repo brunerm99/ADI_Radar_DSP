@@ -20,28 +20,35 @@ style.use('seaborn-dark')
 import netCDF4 as nc
 
 # %%
-sample_rate = 600e3
-sample_period = 1 / sample_rate
-
-time_diff = 120e-3
-
-f = 12.1e9
-c = 3e8
-wavelength = c / f
-
-# %%
 """
 	Read dataset and plot DFT
 """
 ds = nc.Dataset('Data/Test_Track_2.nc', 'r')
 
+# Track was moving at bin 60
 time_start = 60
-time_end = time_start + 2
-x_n = ds.variables['i'][time_start:time_end,:] + 1j * ds.variables['q'][time_start:time_end,:]
-x_n_1, x_n_2 = x_n
+x_n = ds.variables['i'][time_start,:] + 1j * ds.variables['q'][time_start,:]
+total_N = x_n.size
+# %%
+x_n_1 = x_n[0:int(total_N / 2)]
+x_n_2 = x_n[int(total_N / 2):total_N]
 X_k_1 = fft(x_n_1)
 X_k_2 = fft(x_n_2)
 N = x_n_1.size
+
+# %%
+sample_rate = 600e3
+sample_period = 1 / sample_rate
+
+time_diff = N * sample_period
+print('Time delta between signals: %0.2fms' % (time_diff * 1e3))
+
+f = 12.1e9
+c = 3e8
+wavelength = c / f
+
+
+# %%
 
 # Time 
 time = np.linspace(0, N * sample_period, N)
@@ -139,7 +146,7 @@ ax.plot(lags, corr, label='a')
 
 # Print corresponding velocity
 V_r = (wavelength * recovered_phase_shift) / (4 * pi * time_diff)
-print('Target velocity: %0.4f m/s' % V_r)
+print('Target velocity: %0.4f m/s = %0.4f f/s' % (V_r, V_r * 3.28084))
 
 # %%
 """

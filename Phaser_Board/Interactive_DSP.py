@@ -217,7 +217,8 @@ def init_plot(cfar_params=None, axis_limits=[-sample_rate / 2e3, sample_rate / 2
 
     # CFAR plot placeholder
     cfar_placeholder = np.ma.masked_all(X_k.shape)
-    line2, = ax.plot(freq_kHz, 10 * np.log10(abs(cfar_placeholder)), c='r', label='CFAR Threshold')
+    line2, = ax.plot(freq_kHz, 10 * np.log10(abs(cfar_placeholder)), c='r', 
+        label='CFAR Threshold')
 
     # Update plot
     fig.canvas.flush_events()
@@ -257,6 +258,8 @@ def update_plot(fig, ax, line1, line2, x_n, axis_limits, cfar_params=None, xdata
     if (cfar_params):
         cfar_values, targets_only = cfar(X_k, cfar_params['num_guard_cells'], 
             cfar_params['num_ref_cells'], cfar_params['bias'], cfar_params['method'])
+        num_targets = np.count_nonzero(np.where(targets_only[int(N / 2):N] != np.ma.masked))
+        print('Number of targets left (positive frequencies): %i' % num_targets)
         if (cfar_params['mask']):
             X_k = targets_only
         line1.set_ydata(10 * np.log10(abs(X_k)))
