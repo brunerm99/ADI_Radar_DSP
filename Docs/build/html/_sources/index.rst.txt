@@ -11,6 +11,7 @@ Welcome to Phaser Processing's documentation!
    :caption: Contents:
    :glob:
    
+   near_vs_far_field
    Detection_Methods/*
 
 
