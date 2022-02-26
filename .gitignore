@@ -12,3 +12,5 @@ env_setup.sh
 Figures/
 *~lock*
 
+# Readthedocs build/
+Docs/build/
