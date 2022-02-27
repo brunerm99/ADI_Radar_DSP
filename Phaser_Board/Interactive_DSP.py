@@ -345,7 +345,7 @@ def update_phases(my_phaser, scan_angle, num_devs=2, num_channels=4):
     update_gains()
     Description: Updates each channel's gain given a taper values.
     @param my_phaser: Phaser object to be modified.
-    @param taper: Gain taper values for all elements + 2
+    @param taper: Gain taper values for all elements
 """
 def update_gains(my_phaser, taper):
     for dev_index, (dev_name, dev_obj) in enumerate(my_phaser.devices.items()):
