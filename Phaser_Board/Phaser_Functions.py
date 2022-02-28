@@ -19,6 +19,7 @@ from scipy import signal
     @param scan_angle: Desired scan angle
 """
 def update_phases(my_phaser, scan_angle, output_freq, num_devs=2, num_channels=4):
+    print('Setting phase weights:')
     # Calculate phase offsets from scan angle
     phases_rad = np.arange(0, num_devs * num_channels, 1, dtype=float)
     phase_diff = (2 * np.pi * output_freq * my_phaser.element_spacing *
@@ -45,7 +46,8 @@ def update_phases(my_phaser, scan_angle, output_freq, num_devs=2, num_channels=4
     @param my_phaser: Phaser object to be modified.
     @param taper: Gain taper values for all elements
 """
-def update_gains(my_phaser, taper, max_phaser_gain, num_channles=4):
+def update_gains(my_phaser, taper, max_phaser_gain, num_channels=4):
+    print('Setting gain weights:')
     for dev_index, (dev_name, dev_obj) in enumerate(my_phaser.devices.items()):
         for channel_index, channel in enumerate(dev_obj.channels):
             print('Old: %i-%i: %0.4f' % (dev_index, channel_index, channel.rx_gain))
