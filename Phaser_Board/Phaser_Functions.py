@@ -19,7 +19,7 @@ from scipy import signal
     @param scan_angle: Desired scan angle
 """
 def update_phases(my_phaser, scan_angle, output_freq, num_devs=2, num_channels=4):
-    print('Setting phase weights:')
+    print('Scan angle: %0.2f' % scan_angle)
     # Calculate phase offsets from scan angle
     phases_rad = np.arange(0, num_devs * num_channels, 1, dtype=float)
     phase_diff = (2 * np.pi * output_freq * my_phaser.element_spacing *
