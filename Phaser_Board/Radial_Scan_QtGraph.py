@@ -155,7 +155,6 @@ def polar_animation():
     global frame, img
     angle = int((frame * beamwidth / 2) % 180)
     if (angle > int(beamwidth / 2)):
-        print(angle)
         x_n = my_sdr.rx()
         x_n = x_n[0] + x_n[1]
 
@@ -175,7 +174,6 @@ def polar_animation():
 
         img.setImage(zdata.T)
     frame += 1
-
 
 def fft_animation():
     global curve
@@ -244,7 +242,7 @@ if __name__ == '__main__':
     N_theta = 360
 
     frame = 0
-    POLAR = True
+    POLAR = False
     FFT = True
     if (POLAR):
         theta = np.linspace(0, 2 * pi, N_theta)

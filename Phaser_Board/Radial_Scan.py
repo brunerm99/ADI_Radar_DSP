@@ -148,9 +148,12 @@ def downsample(arr, factor):
     arr_ds = signal.resample(arr, int(N / factor))
     return arr_ds, arr_ds.size
 
+# Interpolate in range
 def polar_animation(frame):
     angle = int(frame * beamwidth / 2)
     if (angle > int(beamwidth / 2)):
+        update_phases(my_phaser, angle - 80, output_freq, num_devs=2, num_channels=4)
+
         x_n = my_sdr.rx()
         x_n = x_n[0] + x_n[1]
 
@@ -161,10 +164,10 @@ def polar_animation(frame):
         # X_k_ds, _ = downsample(X_k_rs, ds_factor)
         X_k_ds = X_k_rs
 
-        _, targets_only = cfar(X_k_ds, 10, 30, 3, 'greatest')
+        _, X_k_ds = cfar(X_k_ds, 10, 30, 3, 'greatest')
 
         X_k_width = np.ma.masked_all((beamwidth, N_ds))
-        X_k_width[:] = targets_only
+        X_k_width[:] = X_k_ds
 
         zdata[:,angle - int(beamwidth / 2):angle + int(beamwidth / 2)] = X_k_width.T
         pc.set_array(zdata)
@@ -191,7 +194,7 @@ if __name__ == '__main__':
     num_channels = 4
     taper = windows.blackman(num_devs * num_channels + 
         2)[1:num_devs * num_channels + 1]
-    update_gains(my_phaser, taper, 70, num_channels)
+    update_gains(my_phaser, taper, 127, num_channels)
 
     x_n = my_sdr.rx()
     x_n = x_n[0] + x_n[1]
@@ -235,7 +238,7 @@ if __name__ == '__main__':
     N_test = 20
     N_theta = 360
 
-    POLAR = True
+    POLAR = False
     FFT = True
     if (POLAR):
         # Check to make sure spectrum looks correct
