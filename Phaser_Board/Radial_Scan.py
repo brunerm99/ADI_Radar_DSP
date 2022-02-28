@@ -4,7 +4,6 @@
 
 # %%
 
-from functools import reduce
 import time
 import matplotlib.pyplot as plt
 from matplotlib import animation
@@ -16,10 +15,12 @@ import numpy as np
 from numpy import sin, cos
 from scipy import signal
 from numpy.fft import fft, ifft, fftshift, fftfreq
-from numpy import absolute, pi
+from numpy import absolute, pi, log10
 from target_detection import cfar
 
+# Phaser board interaction
 import adi
+from Phaser_Functions import update_gains, update_phases
 
 
 # Instantiate all the Devices
@@ -241,34 +242,50 @@ def create_figures(num_guard_cells, num_ref_cells, bias, fig_dir='Figures/'):
 # %%
 
 # Reduce size of data for quicker computation
-def reduce_array_size(arr, factor):
+def reduce_array_size(arr, factor, bb_indices):
     N = arr.size
-    arr_rs = arr[int(N / 2):N]
+    arr_rs = arr[bb_indices]
     arr_rs = arr_rs[0:round(N / factor)]
     N_rs = arr_rs.size
     return arr_rs, N_rs
 
-# Down sample signal by a factor
+# Down sample signal by a factor for quicker computation
 def downsample(arr, factor):
     N = arr.size
     arr_ds = signal.resample(arr, int(N / factor))
     return arr_ds, arr_ds.size
 
 def polar_animation(frame):
-    if (frame > int(beamwidth / 2)):
+    angle = int(frame * beamwidth / 2)
+    if (angle > int(beamwidth / 2)):
         x_n = my_sdr.rx()
         x_n = x_n[0] + x_n[1]
 
         X_k = absolute(fft(x_n))
         X_k = fftshift(X_k)
 
-        X_k_rs, _ = reduce_array_size(X_k, 8)
+        X_k_rs, _ = reduce_array_size(X_k, rs_factor, bb_indices)
+        X_k_ds, _ = downsample(X_k_rs, ds_factor)
 
-        X_k_width = np.ma.masked_all((beamwidth, N_rs))
-        X_k_width[:] = X_k_rs
+        X_k_width = np.ma.masked_all((beamwidth, N_ds))
+        X_k_width[:] = X_k_ds
 
-        zdata[:,frame - int(beamwidth / 2):frame + int(beamwidth / 2)] = X_k_width.T
+        zdata[:,angle - int(beamwidth / 2):angle + int(beamwidth / 2)] = X_k_width.T
         pc.set_array(zdata)
+    return [pc]
+
+def fft_animation(frame):
+    x_n = my_sdr.rx()
+    x_n = x_n[0] + x_n[1]
+
+    X_k = absolute(fft(x_n))
+    X_k = fftshift(X_k)
+
+    X_k_rs, _ = reduce_array_size(X_k, rs_factor, bb_indices)
+    X_k_ds, _ = downsample(X_k_rs, ds_factor)
+
+    line1.set_ydata(10 * log10(X_k_ds))
+    return [line1]
 
 if __name__ == '__main__':
     x_n = my_sdr.rx()
@@ -278,61 +295,85 @@ if __name__ == '__main__':
     X_k = absolute(fft(x_n))
     X_k = fftshift(X_k)
 
-
     # Create frequency axis
+    # Shift down to baseband and only keep positive frequncies
+    # Also only keep to a max frequency
     freq = fftshift(fftfreq(N, 1 / sample_rate))
-    freq_kHz = freq / 1e3
+    
+    # signal_freq is the IF frequency
+    max_freq = 130e3
+    bb_indices = np.where((freq >= signal_freq) & (freq <= max_freq))
+    freq_bb = freq[bb_indices]
+    freq_kHz = freq_bb / 1e3
 
-    X_k_rs, N_rs = reduce_array_size(X_k, 8)
-    freq_rs, _ = reduce_array_size(freq, 8)
+    # Reduce array size by a factor, rs_factor
+    rs_factor = 8
+    X_k_rs, N_rs = reduce_array_size(X_k, rs_factor, bb_indices)
+    freq_rs, _ = reduce_array_size(freq, rs_factor, bb_indices)
+
+    # Downsample by a factor, ds_factor
+    ds_factor = 1
+    X_k_ds, N_ds = downsample(X_k_rs, ds_factor)
+    freq_ds, N_ds = downsample(freq_rs, ds_factor)
 
     # Create range-FFT scale
     c = 3e8
     slope = BW / ramp_time_s
-    dist = (c / slope) * freq_rs # meters
+    dist = (c / slope) * (freq_ds - signal_freq) # meters
 
     R_max = np.max(dist)
+    print('Data size reduced from %i to %i' % (N, N_ds))
+    print('Range reduced to: %0.2fm' % R_max)
 
     # R_max = 150
     N_test = 20
     N_theta = 360
 
-    fig = plt.figure()
-    fig.set_figheight(8)
-    fig.set_figwidth(8)
+    POLAR = True
+    FFT = True
+    if (POLAR):
+        # Check to make sure spectrum looks correct
+        fft_fig, fft_ax = plt.subplots()
+        fft_fig.set_figheight(8)
+        fft_fig.set_figwidth(16)
+        fft_ax.set_ylim([0, 70])
 
-    ax = plt.subplot(111, polar=True)
-    theta = np.linspace(0, 2 * pi, N_theta)
-    ranges = np.linspace(1, R_max, N_rs)
-    zdata = np.ma.masked_all((N_rs, N_theta))
+        line1, = fft_ax.plot(freq_ds, 10 * log10(X_k_ds))
 
-    beamwidth = 20
-    X_k_width = np.ma.masked_all((beamwidth, N_rs))
-    X_k_width[:] = X_k_rs
+        # Now for the polar plot
+        fig = plt.figure()
+        fig.set_figheight(8)
+        fig.set_figwidth(8)
 
-    zdata[:,5] = X_k_rs
+        ax = plt.subplot(111, polar=True)
+        theta = np.linspace(0, 2 * pi, N_theta)
+        ranges = np.linspace(1, R_max, N_ds)
+        zdata = np.ma.masked_all((N_ds, N_theta))
 
-    pc = ax.pcolormesh(theta, ranges, zdata)
+        beamwidth = 20
+        X_k_width = np.ma.masked_all((beamwidth, N_ds))
+        X_k_width[:] = X_k_ds
 
-    anim = animation.FuncAnimation(fig, polar_animation, round(N_theta / 2 - (beamwidth / 2)), interval=50, 
-        blit=False, repeat=True)
-    plt.show()
+        zdata[:,5] = X_k_ds
+
+        pc = ax.pcolormesh(theta, ranges, zdata)
+
+        max_frame = int(N_theta / (beamwidth))
+        anim = animation.FuncAnimation(fig, polar_animation, max_frame, interval=50, 
+            blit=True, repeat=True)
+        plt.show()
+
+    elif (FFT):
+        fig, ax = plt.subplots()
+        fig.set_figheight(8)
+        fig.set_figwidth(16)
+        ax.set_ylim([0, 70])
+
+        line1, = ax.plot(freq_ds, 10 * log10(X_k_ds))
+        anim = animation.FuncAnimation(fig, fft_animation, 1, interval=1, 
+            blit=True, repeat=True)
+        plt.show()
 
 
 
-
-# Testing my data reduction...
-# x_n = my_sdr.rx()
-# x_n = x_n[0] + x_n[1]
-
-# X_k = absolute(fft(x_n))
-# X_k = fftshift(X_k)
-
-# X_k_rs, _ = reduce_array_size(X_k, 4)
-
-# X_k_width = np.ma.masked_all((beamwidth, N_rs))
-# X_k_width[:] = X_k_rs
-
-# fig, ax = plt.subplots()
-# ax.plot(X_k_rs)
-# plt.show()
+# %%
