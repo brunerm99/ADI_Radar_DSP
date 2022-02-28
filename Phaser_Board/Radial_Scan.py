@@ -14,6 +14,7 @@ faulthandler.enable()
 import numpy as np
 from numpy import sin, cos
 from scipy import signal
+from scipy.signal import windows
 from numpy.fft import fft, ifft, fftshift, fftfreq
 from numpy import absolute, pi, log10
 from target_detection import cfar
@@ -130,115 +131,7 @@ iq = 1 * (i + 1j * q)
 
 # Send data
 my_sdr._ctx.set_timeout(0)
-my_sdr.tx([iq*0, iq])  # only send data to the 2nd channel (that's all we need)
-
-def plot_rx(realtime_plot=False, plot_dist=False, cfar_params=None, yaxis_limits=[20, 50],
-        masked=False):
-    # Collect raw data buffer, take DFT, and do basic processing
-    x_n = my_sdr.rx()
-    x_n = x_n[0] + x_n[1]
-
-    X_k = absolute(fft(x_n))
-    X_k = fftshift(X_k)
-
-    # Create figure
-    plt.ion()
-    fig, ax = plt.subplots()
-    fig.set_figheight(8)
-    fig.set_figwidth(16)
-    ax.set_ylabel("Magnitude [dB]", fontsize=22)
-    ax.set_ylim(yaxis_limits)
-
-    # Create frequency axis
-    N = len(X_k)
-    freq = fftshift(fftfreq(N, 1 / sample_rate))
-    freq_kHz = freq / 1e3
-
-    # Create range-FFT scale
-    c = 3e8
-    slope = BW / ramp_time_s
-    dist = (c / slope) * freq
-
-    if (plot_dist):
-        ax.set_xlim([-15, 15])
-        ax.set_xlabel("Distance [m]", fontsize=22)
-        xaxis = dist
-    else:
-        # ax.set_xlim([-30, 30])
-        ax.set_xlabel("Frequency [kHz]", fontsize=22)
-        xaxis = freq_kHz
-
-    if (cfar_params):
-        # Get CFAR values and mask non-targets
-        cfar_values, targets_only = cfar(X_k, cfar_params['num_guard_cells'], 
-            cfar_params['num_ref_cells'], cfar_params['bias'], cfar_params['method'])
-        if (masked):
-            X_k = targets_only
-        line1, = ax.plot(xaxis, 10 * np.log10(X_k), c='b', label="Received targets")
-        line2, = ax.plot(xaxis, 10 * np.log10(cfar_values), c='r', label="CFAR Threshold")
-
-        ax.set_title("Received Signal - Frequency Domain\nCFAR Method: %s" % 
-            (cfar_params['method']), fontsize=24)
-        ax.legend(fontsize=18, loc='upper left')
-    else:
-        line1, = ax.plot(xaxis, 10 * np.log10(X_k), c='b')
-        ax.set_title("Received Signal - Frequency Domain", fontsize=24)
-
-    while (realtime_plot):
-        x_n = my_sdr.rx()
-        x_n = x_n[0] + x_n[1]
-
-        X_k = absolute(fft(x_n))
-        X_k = fftshift(X_k)
-
-        # Get CFAR values and mask non-targets
-        if (cfar_params):
-            cfar_values, targets_only = cfar(X_k, cfar_params['num_guard_cells'], 
-                cfar_params['num_ref_cells'], cfar_params['bias'], cfar_params['method'])
-            if (masked):
-                X_k = targets_only
-            line1.set_ydata(10 * np.log10(X_k))
-            line2.set_ydata(10 * np.log10(cfar_values))
-        else:
-            line1.set_ydata(10 * np.log10(X_k))
-        fig.canvas.draw()
-        fig.canvas.flush_events()
-
-    fig.canvas.draw()
-    return fig, x_n
-
-"""
-    Function: create_figures()
-    Description: Creates and saves figures for use in my thesis. This includes all CFAR methods
-        both with and without the values below the threshold masked. 
-"""
-def create_figures(num_guard_cells, num_ref_cells, bias, fig_dir='Figures/'):
-    cfar_methods = ['greatest', 'average', 'smallest']
-    cfar_params = {
-        'num_guard_cells': num_guard_cells,
-        'num_ref_cells': num_ref_cells,
-        'bias': bias,
-        'method': '',
-    }
-    for method in cfar_methods:
-        cfar_params['method'] = method
-
-        fig, x_n = plot_rx(realtime_plot=False, plot_dist=False, cfar_params=cfar_params, masked=True)
-        output_filename = 'CFAR_' + method + '_Masked_Frequency.png'
-        fig.savefig(fig_dir + output_filename)
-
-        fig, x_n = plot_rx(realtime_plot=False, plot_dist=True, cfar_params=cfar_params, masked=True)
-        output_filename = 'CFAR_' + method + '_Masked_Distance.png'
-        fig.savefig(fig_dir + output_filename)
-
-        fig, x_n = plot_rx(realtime_plot=False, plot_dist=False, cfar_params=cfar_params, masked=False)
-        output_filename = 'CFAR_' + method + '_Frequency.png'
-        fig.savefig(fig_dir + output_filename)
-
-        fig, x_n = plot_rx(realtime_plot=False, plot_dist=True, cfar_params=cfar_params, masked=False)
-        output_filename = 'CFAR_' + method + '_Distance.png'
-        fig.savefig(fig_dir + output_filename)
-
+my_sdr.tx([iq*0.5, iq])  # only send data to the 2nd channel (that's all we need)
 # %%
 
 # Reduce size of data for quicker computation
@@ -265,10 +158,13 @@ def polar_animation(frame):
         X_k = fftshift(X_k)
 
         X_k_rs, _ = reduce_array_size(X_k, rs_factor, bb_indices)
-        X_k_ds, _ = downsample(X_k_rs, ds_factor)
+        # X_k_ds, _ = downsample(X_k_rs, ds_factor)
+        X_k_ds = X_k_rs
+
+        _, targets_only = cfar(X_k_ds, 10, 30, 3, 'greatest')
 
         X_k_width = np.ma.masked_all((beamwidth, N_ds))
-        X_k_width[:] = X_k_ds
+        X_k_width[:] = targets_only
 
         zdata[:,angle - int(beamwidth / 2):angle + int(beamwidth / 2)] = X_k_width.T
         pc.set_array(zdata)
@@ -284,10 +180,19 @@ def fft_animation(frame):
     X_k_rs, _ = reduce_array_size(X_k, rs_factor, bb_indices)
     X_k_ds, _ = downsample(X_k_rs, ds_factor)
 
+    _, X_k_ds = cfar(X_k_ds, 10, 30, 3, 'greatest')
+
     line1.set_ydata(10 * log10(X_k_ds))
     return [line1]
 
 if __name__ == '__main__':
+    # Apply blackman taper
+    num_devs = 2
+    num_channels = 4
+    taper = windows.blackman(num_devs * num_channels + 
+        2)[1:num_devs * num_channels + 1]
+    update_gains(my_phaser, taper, 70, num_channels)
+
     x_n = my_sdr.rx()
     x_n = x_n[0] + x_n[1]
     N = x_n.size
@@ -307,22 +212,23 @@ if __name__ == '__main__':
     freq_kHz = freq_bb / 1e3
 
     # Reduce array size by a factor, rs_factor
-    rs_factor = 8
+    rs_factor = 1
     X_k_rs, N_rs = reduce_array_size(X_k, rs_factor, bb_indices)
     freq_rs, _ = reduce_array_size(freq, rs_factor, bb_indices)
 
     # Downsample by a factor, ds_factor
     ds_factor = 1
-    X_k_ds, N_ds = downsample(X_k_rs, ds_factor)
+    # X_k_ds, N_ds = downsample(X_k_rs, ds_factor)
+    X_k_ds = X_k_rs
     freq_ds, N_ds = downsample(freq_rs, ds_factor)
 
     # Create range-FFT scale
     c = 3e8
     slope = BW / ramp_time_s
-    dist = (c / slope) * (freq_ds - signal_freq) # meters
+    dist = (c / slope) * (freq_bb - signal_freq) # meters
 
     R_max = np.max(dist)
-    print('Data size reduced from %i to %i' % (N, N_ds))
+    print('Data size reduced from %i to %i' % (N, X_k_ds.size))
     print('Range reduced to: %0.2fm' % R_max)
 
     # R_max = 150
