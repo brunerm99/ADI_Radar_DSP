@@ -242,8 +242,8 @@ if __name__ == '__main__':
     N_theta = 360
 
     frame = 0
-    POLAR = False
-    FFT = True
+    POLAR = True
+    FFT = False
     if (POLAR):
         theta = np.linspace(0, 2 * pi, N_theta)
         ranges = np.linspace(1, R_max, N_ds)
@@ -257,24 +257,23 @@ if __name__ == '__main__':
 
         max_frame = int(N_theta / (beamwidth))
 
-        app = pg.mkQApp('2D Viewer')
+        # app = pg.mkQApp('2D Viewer')
+        # win = pg.GraphicsLayoutWidget()
+        # ax2D = win.addPlot(title='2D spectrum', row=0, col=0)
+        # ax2D.setXRange(0, 180)
+        # ax2D.setYRange(0, 1000)
 
-        win = pg.GraphicsLayoutWidget()
-        ax2D = win.addPlot(title='2D spectrum', row=0, col=0)
-        ax2D.setXRange(0, 180)
-        ax2D.setYRange(0, 1000)
+        # img = pg.ImageItem()
+        # img.setImage(zdata.T)
+        # ax2D.addItem(img)
 
-        img = pg.ImageItem()
-        img.setImage(zdata.T)
-        ax2D.addItem(img)
+        # timer = QtCore.QTimer()
+        # timer.timeout.connect(polar_animation)
+        # timer.start(0)
 
-        timer = QtCore.QTimer()
-        timer.timeout.connect(polar_animation)
-        timer.start(0)
-
-        win.show()
-        win.raise_()
-        app.exec_()
+        # win.show()
+        # win.raise_()
+        # app.exec_()
 
     elif (FFT):
         app = pg.mkQApp('FFT Viewer')
