@@ -31,6 +31,11 @@ extensions = [
 	'myst_parser',
 ]
 
+source_suffix = [
+	'.rst',
+	'.md',
+]
+
 myst_enable_extensions = [
 	'dollarmath',
 ]
