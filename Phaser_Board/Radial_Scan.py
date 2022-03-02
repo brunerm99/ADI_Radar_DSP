@@ -13,7 +13,7 @@ faulthandler.enable()
 # Signal processing stuff
 import numpy as np
 from numpy import sin, cos
-from scipy import signal
+from scipy import signal, interpolate
 from scipy.signal import windows
 from numpy.fft import fft, ifft, fftshift, fftfreq
 from numpy import absolute, pi, log10
@@ -23,9 +23,9 @@ from target_detection import cfar
 import adi
 from Phaser_Functions import update_gains, update_phases
 
-
 # Instantiate all the Devices
 rpi_ip = "ip:phaser.local"  # IP address of the Raspberry Pi
+rpi_ip = "ip:192.168.1.146"
 sdr_ip = "ip:192.168.2.1" # "192.168.2.1, or pluto.local"  # IP address of the Transreceiver Block
 
 try:
@@ -148,7 +148,9 @@ def downsample(arr, factor):
     arr_ds = signal.resample(arr, int(N / factor))
     return arr_ds, arr_ds.size
 
-# Interpolate in range
+def interp_range():
+    pass
+
 def polar_animation(frame):
     angle = int(frame * beamwidth / 2)
     if (angle > int(beamwidth / 2)):
@@ -167,7 +169,7 @@ def polar_animation(frame):
         _, X_k_ds = cfar(X_k_ds, 10, 30, 3, 'greatest')
 
         X_k_width = np.ma.masked_all((beamwidth, N_ds))
-        X_k_width[:] = X_k_ds
+        X_k_width[:] = interpolate.interp1d(freq_ds, X_k_ds)(freq_ds)
 
         zdata[:,angle - int(beamwidth / 2):angle + int(beamwidth / 2)] = X_k_width.T
         pc.set_array(zdata)
@@ -238,7 +240,7 @@ if __name__ == '__main__':
     N_test = 20
     N_theta = 360
 
-    POLAR = False
+    POLAR = True 
     FFT = True
     if (POLAR):
         # Check to make sure spectrum looks correct
