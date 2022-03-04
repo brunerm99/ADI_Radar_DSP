@@ -181,19 +181,24 @@ def polar_animation():
     frame += 1
 
 def fft_animation():
-    global curve
+    global curve, w_n
     x_n = my_sdr.rx()
     x_n = x_n[0] + x_n[1]
+    # x_n *= w_n
 
-    X_k = absolute(fft(x_n))
+    sos = signal.cheby1(10, 1, 105000, btype='hp', fs=fs, output='sos')
+    x_n_filtered = signal.sosfilt(sos, x_n)
+
+
+    X_k = absolute(fft(x_n_filtered))
     X_k = fftshift(X_k)
-
-    X_k_rs, _ = reduce_array_size(X_k, rs_factor, bb_indices)
-    X_k_ds, _ = downsample(X_k_rs, ds_factor)
+    X_k_ds = X_k
+    # X_k_rs, _ = reduce_array_size(X_k, rs_factor, bb_indices)
+    # X_k_ds, _ = downsample(X_k_rs, ds_factor)
 
     # _, X_k_ds = cfar(X_k_ds, 10, 30, 3, 'greatest')
 
-    curve.setData(freq_ds, 10 * log10(X_k_ds))
+    curve.setData(freq, 10 * log10(X_k))
 
 if __name__ == '__main__':
     # Apply blackman taper
@@ -203,9 +208,13 @@ if __name__ == '__main__':
         2)[1:num_devs * num_channels + 1]
     update_gains(my_phaser, taper, 70, num_channels)
 
+   
     x_n = my_sdr.rx()
     x_n = x_n[0] + x_n[1]
     N = x_n.size
+
+    w_n = signal.windows.hamming(N)
+    x_n *= w_n
 
     X_k = absolute(fft(x_n))
     X_k = fftshift(X_k)

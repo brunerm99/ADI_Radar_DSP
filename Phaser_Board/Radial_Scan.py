@@ -159,7 +159,7 @@ def polar_animation(frame):
     global x_n_old, fig
     angle = int(frame * beamwidth / 2)
     if (angle > int(beamwidth / 2)):
-        # update_phases(my_phaser, angle - 80, output_freq, num_devs=2, num_channels=4)
+        update_phases(my_phaser, angle - 80, output_freq, num_devs=2, num_channels=4)
 
         x_n_new = my_sdr.rx()
         x_n_new = x_n_new[0] + x_n_new[1]
@@ -176,7 +176,7 @@ def polar_animation(frame):
         # X_k_ds, _ = downsample(X_k_rs, ds_factor)
         X_k_ds = X_k_rs
 
-        _, X_k_ds = cfar(X_k_ds, 10, 30, 3, 'greatest')
+        # _, X_k_ds = cfar(X_k_ds, 10, 30, 3, 'greatest')
 
         X_k_width = np.ma.masked_all((beamwidth, N_ds))
         # X_k_width[:] = interpolate.interp1d(freq_ds, X_k_ds)(freq_ds)
@@ -249,7 +249,7 @@ if __name__ == '__main__':
 
     R_max = np.max(dist)
     print('Data size reduced from %i to %i' % (N, X_k_ds.size))
-    print('Range reduced to: %0.2fm' % R_max)
+    print('Range reduced to: %0.2fm (%0.2fkHz)' % (R_max, max_freq / 1e3))
 
     # R_max = 150
     N_test = 20
