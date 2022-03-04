@@ -65,28 +65,29 @@ if __name__ == '__main__':
     # cart_data = polar_to_cart(polar_data, 1, 500, x, y)
     # plt.plot(cart_data)
 
-    # from scipy import ndimage
-    # polar_data = np.ma.masked_all((100, 100))
-    # polar_data[40:50,50:] = 1
-    # polar_rot1 = ndimage.rotate(polar_data, 20, reshape=False, mode='nearest')
-    # polar_rot2 = ndimage.rotate(polar_data, 45, reshape=False, mode='nearest')
+    from scipy import ndimage
+    
+    polar_data = np.ma.masked_all((100, 100))
+    polar_data[40:50,50:] = 1
+    polar_rot1 = ndimage.rotate(polar_data, 20, reshape=False, mode='nearest')
+    polar_rot2 = ndimage.rotate(polar_data, 45, reshape=False, mode='nearest')
     # polar_rot1[np.where(polar_rot2 != np.ma.masked)] = polar_rot2[np.where(polar_rot2 != np.ma.masked)]
     
-    # fig, ax = plt.subplots()
+    fig, ax = plt.subplots()
     # ax.imshow(polar_data)
-    # plt.imshow(polar_rot1)
-    # fig.set_figwidth(8)
-    # fig.set_figheight(8)
+    plt.imshow(polar_rot1)
+    fig.set_figwidth(8)
+    fig.set_figheight(8)
     
-    angle_resolution = 1
-    range_max = 400
+    # angle_resolution = 1
+    # range_max = 400
 
-    a, r = np.mgrid[0:int(360/angle_resolution),0:range_max]
+    # a, r = np.mgrid[0:int(360/angle_resolution),0:range_max]
 
-    x = (range_max + r * np.cos(a*(2 * pi)/360.0)).astype(int)
-    y = (range_max + r * np.sin(a*(2 * pi)/360.0)).astype(int)
+    # x = (range_max + r * np.cos(a*(2 * pi)/360.0)).astype(int)
+    # y = (range_max + r * np.sin(a*(2 * pi)/360.0)).astype(int)
 
-    cart_grid = np.zeros((360))
+    # cart_grid = np.zeros((360))
 
-    for i in range(0, int(360/angle_resolution)): 
-        cart_grid[y[i,:],x[i,:]] = polar_data[i,:]
+    # for i in range(0, int(360/angle_resolution)): 
+    #     cart_grid[y[i,:],x[i,:]] = polar_data[i,:]
