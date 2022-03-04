@@ -187,10 +187,10 @@ def fft_animation():
     # x_n *= w_n
 
     sos = signal.cheby1(10, 1, 105000, btype='hp', fs=fs, output='sos')
-    x_n_filtered = signal.sosfilt(sos, x_n)
+    # x_n_filtered = signal.sosfilt(sos, x_n)
 
 
-    X_k = absolute(fft(x_n_filtered))
+    X_k = absolute(fft(x_n))
     X_k = fftshift(X_k)
     X_k_ds = X_k
     # X_k_rs, _ = reduce_array_size(X_k, rs_factor, bb_indices)
