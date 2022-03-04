@@ -28,13 +28,15 @@ np.seterr(divide='ignore')
 
 import adi
 
-
-"""
-    Initialize device and setup
-"""
 # Instantiate all the Devices
-rpi_ip = "ip:phaser.local"  # IP address of the Raspberry Pi
-sdr_ip = "ip:192.168.2.1" # "192.168.2.1, or pluto.local"  # IP address of the Transreceiver Block
+try:
+    import phaser_config
+    rpi_ip = phaser_config.rpi_ip
+    sdr_ip = "ip:192.168.2.1" # "192.168.2.1, or pluto.local"  # IP address of the Transreceiver Block
+except:
+    print('No config file found...')
+    rpi_ip = "ip:phaser.local"  # IP address of the Raspberry Pi
+    sdr_ip = "ip:192.168.2.1" # "192.168.2.1, or pluto.local"  # IP address of the Transreceiver Block
 
 try:
     x = my_sdr.uri

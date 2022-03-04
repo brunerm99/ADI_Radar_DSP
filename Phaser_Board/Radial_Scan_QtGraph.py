@@ -26,11 +26,15 @@ from target_detection import cfar
 import adi
 from Phaser_Functions import update_gains, update_phases
 
-
 # Instantiate all the Devices
-rpi_ip = "ip:phaser.local"  # IP address of the Raspberry Pi
-rpi_ip = "ip:192.168.1.146"
-sdr_ip = "ip:192.168.2.1" # "192.168.2.1, or pluto.local"  # IP address of the Transreceiver Block
+try:
+    import phaser_config
+    rpi_ip = phaser_config.rpi_ip
+    sdr_ip = "ip:192.168.2.1" # "192.168.2.1, or pluto.local"  # IP address of the Transreceiver Block
+except:
+    print('No config file found...')
+    rpi_ip = "ip:phaser.local"  # IP address of the Raspberry Pi
+    sdr_ip = "ip:192.168.2.1" # "192.168.2.1, or pluto.local"  # IP address of the Transreceiver Block
 
 try:
     x = my_sdr.uri
@@ -211,9 +215,12 @@ if __name__ == '__main__':
     # Also only keep to a max frequency
     freq = fftshift(fftfreq(N, 1 / sample_rate))
     
+    c = 3e8
+    slope = BW / ramp_time_s
+
     # signal_freq is the IF frequency
-    max_freq = 130e3
-    max_freq = np.max(freq)
+    max_dist = float(input("Enter max distance: "))
+    max_freq = max_dist * slope / c + signal_freq
     bb_indices = np.where((freq >= signal_freq) & (freq <= max_freq))
     freq_bb = freq[bb_indices]
     freq_kHz = freq_bb / 1e3
@@ -230,8 +237,6 @@ if __name__ == '__main__':
     freq_ds, N_ds = downsample(freq_rs, ds_factor)
 
     # Create range-FFT scale
-    c = 3e8
-    slope = BW / ramp_time_s
     dist = (c / slope) * (freq_bb - signal_freq) # meters
 
     R_max = np.max(dist)

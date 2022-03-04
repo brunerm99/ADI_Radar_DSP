@@ -5,8 +5,10 @@
 # %%
 
 import time
+import matplotlib
 import matplotlib.pyplot as plt
 from matplotlib import animation
+import colorcet
 import faulthandler
 faulthandler.enable()
 
@@ -24,9 +26,14 @@ import adi
 from Phaser_Functions import update_gains, update_phases
 
 # Instantiate all the Devices
-rpi_ip = "ip:phaser.local"  # IP address of the Raspberry Pi
-rpi_ip = "ip:192.168.1.146"
-sdr_ip = "ip:192.168.2.1" # "192.168.2.1, or pluto.local"  # IP address of the Transreceiver Block
+try:
+    import phaser_config
+    rpi_ip = phaser_config.rpi_ip
+    sdr_ip = "ip:192.168.2.1" # "192.168.2.1, or pluto.local"  # IP address of the Transreceiver Block
+except:
+    print('No config file found...')
+    rpi_ip = "ip:phaser.local"  # IP address of the Raspberry Pi
+    sdr_ip = "ip:192.168.2.1" # "192.168.2.1, or pluto.local"  # IP address of the Transreceiver Block
 
 try:
     x = my_sdr.uri
@@ -148,16 +155,19 @@ def downsample(arr, factor):
     arr_ds = signal.resample(arr, int(N / factor))
     return arr_ds, arr_ds.size
 
-def interp_range():
-    pass
-
 def polar_animation(frame):
+    global x_n_old, fig
     angle = int(frame * beamwidth / 2)
     if (angle > int(beamwidth / 2)):
-        update_phases(my_phaser, angle - 80, output_freq, num_devs=2, num_channels=4)
+        # update_phases(my_phaser, angle - 80, output_freq, num_devs=2, num_channels=4)
 
-        x_n = my_sdr.rx()
-        x_n = x_n[0] + x_n[1]
+        x_n_new = my_sdr.rx()
+        x_n_new = x_n_new[0] + x_n_new[1]
+
+        # Coherent change detection (CCD)
+        # x_n = x_n_new  - x_n_old
+        # x_n_old = x_n_new
+        x_n = x_n_new
 
         X_k = absolute(fft(x_n))
         X_k = fftshift(X_k)
@@ -169,10 +179,12 @@ def polar_animation(frame):
         _, X_k_ds = cfar(X_k_ds, 10, 30, 3, 'greatest')
 
         X_k_width = np.ma.masked_all((beamwidth, N_ds))
-        X_k_width[:] = interpolate.interp1d(freq_ds, X_k_ds)(freq_ds)
+        # X_k_width[:] = interpolate.interp1d(freq_ds, X_k_ds)(freq_ds)
+        X_k_width[:] = X_k_ds
 
         zdata[:,angle - int(beamwidth / 2):angle + int(beamwidth / 2)] = X_k_width.T
         pc.set_array(zdata)
+        # fig.savefig('Figures/Noisy_2D_Plot%i.png' % angle)
     return [pc]
 
 def fft_animation(frame):
@@ -200,6 +212,7 @@ if __name__ == '__main__':
 
     x_n = my_sdr.rx()
     x_n = x_n[0] + x_n[1]
+    x_n_old = x_n
     N = x_n.size
 
     X_k = absolute(fft(x_n))
@@ -209,9 +222,13 @@ if __name__ == '__main__':
     # Shift down to baseband and only keep positive frequncies
     # Also only keep to a max frequency
     freq = fftshift(fftfreq(N, 1 / sample_rate))
+
+    c = 3e8
+    slope = BW / ramp_time_s
     
     # signal_freq is the IF frequency
-    max_freq = 130e3
+    max_dist = float(input("Enter max distance: "))
+    max_freq = max_dist * slope / c + signal_freq
     bb_indices = np.where((freq >= signal_freq) & (freq <= max_freq))
     freq_bb = freq[bb_indices]
     freq_kHz = freq_bb / 1e3
@@ -228,8 +245,6 @@ if __name__ == '__main__':
     freq_ds, N_ds = downsample(freq_rs, ds_factor)
 
     # Create range-FFT scale
-    c = 3e8
-    slope = BW / ramp_time_s
     dist = (c / slope) * (freq_bb - signal_freq) # meters
 
     R_max = np.max(dist)
@@ -244,12 +259,12 @@ if __name__ == '__main__':
     FFT = True
     if (POLAR):
         # Check to make sure spectrum looks correct
-        fft_fig, fft_ax = plt.subplots()
-        fft_fig.set_figheight(8)
-        fft_fig.set_figwidth(16)
-        fft_ax.set_ylim([0, 70])
+        # fft_fig, fft_ax = plt.subplots()
+        # fft_fig.set_figheight(8)
+        # fft_fig.set_figwidth(16)
+        # fft_ax.set_ylim([0, 70])
 
-        line1, = fft_ax.plot(freq_ds, 10 * log10(X_k_ds))
+        # line1, = fft_ax.plot(freq_ds, 10 * log10(X_k_ds))
 
         # Now for the polar plot
         fig = plt.figure()
@@ -257,20 +272,25 @@ if __name__ == '__main__':
         fig.set_figwidth(8)
 
         ax = plt.subplot(111, polar=True)
-        theta = np.linspace(0, 2 * pi, N_theta)
+        ax.set_title('Max distance: %0.2f\n$%0.2f^\circ < \\theta < %0.2f^\circ$' % 
+            (max_dist, -90, 90))
+        ax.set_theta_zero_location('N')
+        theta = np.linspace(-pi / 2, -pi / 2 + 2 * pi, N_theta)
         ranges = np.linspace(1, R_max, N_ds)
         zdata = np.ma.masked_all((N_ds, N_theta))
 
         beamwidth = 20
         X_k_width = np.ma.masked_all((beamwidth, N_ds))
-        X_k_width[:] = X_k_ds
+        X_k_width[:] = 10 * log10(X_k_ds)
 
         zdata[:,5] = X_k_ds
 
         pc = ax.pcolormesh(theta, ranges, zdata)
+        cmap = matplotlib.cm.get_cmap('cet_CET_L20')
+        fig.colorbar(pc, cmap=cmap, orientation='vertical')
 
         max_frame = int(N_theta / (beamwidth))
-        anim = animation.FuncAnimation(fig, polar_animation, max_frame, interval=50, 
+        anim = animation.FuncAnimation(fig, polar_animation, max_frame, interval=0, 
             blit=True, repeat=True)
         plt.show()
 
