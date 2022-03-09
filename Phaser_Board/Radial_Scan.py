@@ -155,6 +155,30 @@ def downsample(arr, factor):
     arr_ds = signal.resample(arr, int(N / factor))
     return arr_ds, arr_ds.size
 
+"""
+    Sorts frequency spectrum points into range bins
+"""
+def range_bin(freq, X_k, N_total):
+    r_res = c / (2 * BW)
+    f_res = 2 * r_res * slope / c
+
+    f_diff = sample_rate / N_total
+
+    # Range bin size
+    n = int(np.ceil(f_res / f_diff))
+
+    # print('Frequency resolution (from BW): %0.2fHz' % f_res)
+    # print('Frequency resolution (from Ts and N): %0.2fHz' % f_diff)
+    # print('Range resolution: %0.2fm' % r_res)
+
+    pad_amount = n - (X_k.size % n)
+    X_k_bin = np.pad(X_k, (0, pad_amount), 'constant')
+
+    X_k_bin = np.max(X_k_bin.reshape(-1, n), axis=1)
+    freq_bin = np.linspace(100e3, 300e3, X_k_bin.size)
+
+    return X_k_bin, freq_bin
+
 def polar_animation(frame):
     global x_n_old, fig
     angle = int(frame * beamwidth / 2)
@@ -173,9 +197,11 @@ def polar_animation(frame):
         X_k = fftshift(X_k)
 
         X_k_rs, _ = reduce_array_size(X_k, rs_factor, bb_indices)
-        # X_k_ds, _ = downsample(X_k_rs, ds_factor)
         X_k_ds = X_k_rs
 
+        X_k_ds, _ = range_bin(X_k_ds, X_k_ds, N)
+
+        # CFAR
         # _, X_k_ds = cfar(X_k_ds, 10, 30, 3, 'greatest')
 
         X_k_width = np.ma.masked_all((beamwidth, N_ds))
@@ -244,6 +270,9 @@ if __name__ == '__main__':
     X_k_ds = X_k_rs
     freq_ds, N_ds = downsample(freq_rs, ds_factor)
 
+    X_k_ds, freq_ds = range_bin(freq_ds, X_k_ds, N)
+    N_ds = X_k_ds.size
+
     # Create range-FFT scale
     dist = (c / slope) * (freq_bb - signal_freq) # meters
 
@@ -258,15 +287,6 @@ if __name__ == '__main__':
     POLAR = True 
     FFT = True
     if (POLAR):
-        # Check to make sure spectrum looks correct
-        # fft_fig, fft_ax = plt.subplots()
-        # fft_fig.set_figheight(8)
-        # fft_fig.set_figwidth(16)
-        # fft_ax.set_ylim([0, 70])
-
-        # line1, = fft_ax.plot(freq_ds, 10 * log10(X_k_ds))
-
-        # Now for the polar plot
         fig = plt.figure()
         fig.set_figheight(8)
         fig.set_figwidth(8)
