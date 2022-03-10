@@ -56,3 +56,39 @@ def update_gains(my_phaser, taper, max_phaser_gain, num_channels=4):
                 end='\n\n')
             dev_obj.latch_rx_settings()
 
+
+"""
+    range_bin()
+
+"""
+def range_bin(X_k, N_total, BW=500e6, sample_rate=600e3, slope=500e9):
+    # Resolution
+    c = 3e8
+    r_res = c / (2 * BW)
+    f_res = 2 * r_res * slope / c
+
+    # Spectrum separation
+    f_diff = sample_rate / N_total
+
+    # Range bin size
+    n = int(np.ceil(f_res / f_diff))
+    n = n if n >= 1 else 1
+
+    # print('Frequency resolution (from BW): %0.2fHz' % f_res)
+    # print('Frequency resolution (from Ts and N): %0.2fHz' % f_diff)
+    # print('Range resolution: %0.2fm' % r_res)
+
+    pad_amount = n - (X_k.size % n)
+    X_k_bin = np.pad(X_k, (0, pad_amount), 'constant')
+
+    X_k_bin = np.max(X_k_bin.reshape(-1, n), axis=1)
+
+    return X_k_bin, r_res
+
+"""
+    range_norm()
+"""
+def range_norm(X_k, ranges, ref_range=1):
+    norm_factors = (ranges / ref_range)**2
+    X_k *= norm_factors
+    return X_k

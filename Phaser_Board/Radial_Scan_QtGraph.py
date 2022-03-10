@@ -24,7 +24,7 @@ from target_detection import cfar
 
 # Phaser board interaction
 import adi
-from Phaser_Functions import update_gains, update_phases
+from Phaser_Functions import update_gains, update_phases, range_bin, range_norm
 
 # Instantiate all the Devices
 try:
@@ -181,24 +181,27 @@ def polar_animation():
     frame += 1
 
 def fft_animation():
-    global curve, w_n
+    global curve, w_n, freq_ds, dist
     x_n = my_sdr.rx()
     x_n = x_n[0] + x_n[1]
     # x_n *= w_n
 
-    sos = signal.cheby1(10, 1, 105000, btype='hp', fs=fs, output='sos')
+    # sos = signal.cheby1(10, 1, 105000, btype='hp', fs=fs, output='sos')
     # x_n_filtered = signal.sosfilt(sos, x_n)
-
 
     X_k = absolute(fft(x_n))
     X_k = fftshift(X_k)
     X_k_ds = X_k
-    # X_k_rs, _ = reduce_array_size(X_k, rs_factor, bb_indices)
-    # X_k_ds, _ = downsample(X_k_rs, ds_factor)
+    X_k_ds, _ = reduce_array_size(X_k, rs_factor, bb_indices)
+
+    X_k_ds, d_res = range_bin(X_k_ds, N)
+    N_ds = X_k_ds.size
 
     # _, X_k_ds = cfar(X_k_ds, 10, 30, 3, 'greatest')
 
-    curve.setData(freq, 10 * log10(X_k))
+    X_k_ds = range_norm(X_k_ds, dist, 1)
+    X_k_dbfs = 20 * log10(X_k_ds / 2**12)
+    curve.setData(freq_ds, X_k_dbfs)
 
 if __name__ == '__main__':
     # Apply blackman taper
@@ -230,23 +233,23 @@ if __name__ == '__main__':
     # signal_freq is the IF frequency
     max_dist = float(input("Enter max distance: "))
     max_freq = max_dist * slope / c + signal_freq
+    max_freq = np.max(freq)
     bb_indices = np.where((freq >= signal_freq) & (freq <= max_freq))
     freq_bb = freq[bb_indices]
     freq_kHz = freq_bb / 1e3
 
     # Reduce array size by a factor, rs_factor
     rs_factor = 1
-    X_k_rs, N_rs = reduce_array_size(X_k, rs_factor, bb_indices)
-    freq_rs, _ = reduce_array_size(freq, rs_factor, bb_indices)
+    X_k_ds, N_ds = reduce_array_size(X_k, rs_factor, bb_indices)
+    freq_ds, _ = reduce_array_size(freq, rs_factor, bb_indices)
 
-    # Downsample by a factor, ds_factor
-    ds_factor = 1
-    # X_k_ds, N_ds = downsample(X_k_rs, ds_factor)
-    X_k_ds = X_k_rs
-    freq_ds, N_ds = downsample(freq_rs, ds_factor)
+    X_k_ds, d_res = range_bin(X_k_ds, N)
+    N_ds = X_k_ds.size
+    freq_ds = np.linspace(signal_freq, max_freq, N_ds)
+    print('Range bins: %i @ %0.2fm' % (N_ds, d_res))
 
     # Create range-FFT scale
-    dist = (c / slope) * (freq_bb - signal_freq) # meters
+    dist = (c / slope) * (freq_ds - signal_freq) # meters
 
     R_max = np.max(dist)
     print('Data size reduced from %i to %i' % (N, X_k_ds.size))
@@ -298,10 +301,12 @@ if __name__ == '__main__':
         p = pg.plot()
         p.setWindowTitle('DFT Plot')
         p.setLabel('bottom', 'Frequency', units='Hz')
-        p.setLabel('left', 'Magnitude', units='dB')
+        p.setLabel('left', 'Magnitude', units='dBFS')
         p.setTitle('Received Signal - Frequency Spectrum')
         p.setYRange(0, 70)
-        curve = p.plot(freq_ds, 10 * log10(X_k_ds))
+        X_k_ds = range_norm(X_k_ds, dist, 1)
+        X_k_dbfs = 20 * log10(X_k_ds / 2**12)
+        curve = p.plot(freq_ds, X_k_dbfs)
 
         timer = QtCore.QTimer()
         timer.timeout.connect(fft_animation)

@@ -23,7 +23,7 @@ from target_detection import cfar
 
 # Phaser board interaction
 import adi
-from Phaser_Functions import update_gains, update_phases
+from Phaser_Functions import update_gains, update_phases, range_bin, range_norm
 
 # Instantiate all the Devices
 try:
@@ -155,32 +155,8 @@ def downsample(arr, factor):
     arr_ds = signal.resample(arr, int(N / factor))
     return arr_ds, arr_ds.size
 
-"""
-    Sorts frequency spectrum points into range bins
-"""
-def range_bin(freq, X_k, N_total):
-    r_res = c / (2 * BW)
-    f_res = 2 * r_res * slope / c
-
-    f_diff = sample_rate / N_total
-
-    # Range bin size
-    n = int(np.ceil(f_res / f_diff))
-
-    # print('Frequency resolution (from BW): %0.2fHz' % f_res)
-    # print('Frequency resolution (from Ts and N): %0.2fHz' % f_diff)
-    # print('Range resolution: %0.2fm' % r_res)
-
-    pad_amount = n - (X_k.size % n)
-    X_k_bin = np.pad(X_k, (0, pad_amount), 'constant')
-
-    X_k_bin = np.max(X_k_bin.reshape(-1, n), axis=1)
-    freq_bin = np.linspace(100e3, 300e3, X_k_bin.size)
-
-    return X_k_bin, freq_bin
-
 def polar_animation(frame):
-    global x_n_old, fig
+    global x_n_old, fig, dist
     angle = int(frame * beamwidth / 2)
     if (angle > int(beamwidth / 2)):
         update_phases(my_phaser, angle - 80, output_freq, num_devs=2, num_channels=4)
@@ -189,6 +165,7 @@ def polar_animation(frame):
         x_n_new = x_n_new[0] + x_n_new[1]
 
         # Coherent change detection (CCD)
+        # Most likely needs TDD engine to work properly
         # x_n = x_n_new  - x_n_old
         # x_n_old = x_n_new
         x_n = x_n_new
@@ -199,7 +176,9 @@ def polar_animation(frame):
         X_k_rs, _ = reduce_array_size(X_k, rs_factor, bb_indices)
         X_k_ds = X_k_rs
 
-        X_k_ds, _ = range_bin(X_k_ds, X_k_ds, N)
+        X_k_ds, _ = range_bin(X_k_ds, N)
+
+        X_k_ds = range_norm(X_k_ds, dist, 1)
 
         # CFAR
         # _, X_k_ds = cfar(X_k_ds, 10, 30, 3, 'greatest')
@@ -244,14 +223,14 @@ if __name__ == '__main__':
     X_k = absolute(fft(x_n))
     X_k = fftshift(X_k)
 
+    c = 3e8
+    slope = BW / ramp_time_s
+
     # Create frequency axis
     # Shift down to baseband and only keep positive frequncies
     # Also only keep to a max frequency
     freq = fftshift(fftfreq(N, 1 / sample_rate))
 
-    c = 3e8
-    slope = BW / ramp_time_s
-    
     # signal_freq is the IF frequency
     max_dist = float(input("Enter max distance: "))
     max_freq = max_dist * slope / c + signal_freq
@@ -259,7 +238,7 @@ if __name__ == '__main__':
     freq_bb = freq[bb_indices]
     freq_kHz = freq_bb / 1e3
 
-    # Reduce array size by a factor, rs_factor
+    # Reduce array size by a factor, rs_factor, for faster computation
     rs_factor = 1
     X_k_rs, N_rs = reduce_array_size(X_k, rs_factor, bb_indices)
     freq_rs, _ = reduce_array_size(freq, rs_factor, bb_indices)
@@ -270,15 +249,17 @@ if __name__ == '__main__':
     X_k_ds = X_k_rs
     freq_ds, N_ds = downsample(freq_rs, ds_factor)
 
-    X_k_ds, freq_ds = range_bin(freq_ds, X_k_ds, N)
+    X_k_ds, d_res = range_bin(X_k_ds, N)
     N_ds = X_k_ds.size
+    freq_ds = np.linspace(signal_freq, max_freq, N_ds)
+    print('Range bins: %i @ %0.2fm' % (N_ds, d_res))
 
     # Create range-FFT scale
-    dist = (c / slope) * (freq_bb - signal_freq) # meters
+    dist = (c / slope) * (freq_ds - signal_freq) # meters
 
     R_max = np.max(dist)
     print('Data size reduced from %i to %i' % (N, X_k_ds.size))
-    print('Range reduced to: %0.2fm (%0.2fkHz)' % (R_max, max_freq / 1e3))
+    print('Round-trip range reduced to: %0.2fm (%0.2fkHz)' % (R_max, max_freq / 1e3))
 
     # R_max = 150
     N_test = 20
@@ -300,9 +281,10 @@ if __name__ == '__main__':
         zdata = np.ma.masked_all((N_ds, N_theta))
 
         beamwidth = 20
-        X_k_width = np.ma.masked_all((beamwidth, N_ds))
-        X_k_width[:] = 10 * log10(X_k_ds)
+        # X_k_width = np.ma.masked_all((beamwidth, N_ds))
+        # X_k_width[:] = 10 * log10(X_k_ds)
 
+        X_k_ds = range_norm(X_k_ds, dist, 1)
         zdata[:,5] = X_k_ds
 
         pc = ax.pcolormesh(theta, ranges, zdata)
