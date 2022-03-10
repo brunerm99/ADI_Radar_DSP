@@ -173,15 +173,18 @@ def polar_animation(frame):
         X_k = absolute(fft(x_n))
         X_k = fftshift(X_k)
 
+        # Only keep positive frequencies until max range specified by user
         X_k_rs, _ = reduce_array_size(X_k, rs_factor, bb_indices)
         X_k_ds = X_k_rs
 
+        # Range binning
         X_k_ds, _ = range_bin(X_k_ds, N)
 
+        # Range normalization
         X_k_ds = range_norm(X_k_ds, dist, 1)
 
-        # CFAR
-        # _, X_k_ds = cfar(X_k_ds, 10, 30, 3, 'greatest')
+        # CFAR 
+        _, X_k_ds = cfar(X_k_ds, 0, 3, 1.5, 'greatest')
 
         X_k_width = np.ma.masked_all((beamwidth, N_ds))
         # X_k_width[:] = interpolate.interp1d(freq_ds, X_k_ds)(freq_ds)
@@ -189,7 +192,8 @@ def polar_animation(frame):
 
         zdata[:,angle - int(beamwidth / 2):angle + int(beamwidth / 2)] = X_k_width.T
         pc.set_array(zdata)
-        # fig.savefig('Figures/Noisy_2D_Plot%i.png' % angle)
+        # if (angle % 170 == 0):
+        #     fig.savefig('Figures/TestNoNorm.png' )
     return [pc]
 
 def fft_animation(frame):
@@ -199,13 +203,17 @@ def fft_animation(frame):
     X_k = absolute(fft(x_n))
     X_k = fftshift(X_k)
 
-    X_k_rs, _ = reduce_array_size(X_k, rs_factor, bb_indices)
-    X_k_ds, _ = downsample(X_k_rs, ds_factor)
+    X_k_ds, _ = reduce_array_size(X_k, rs_factor, bb_indices)
 
-    _, X_k_ds = cfar(X_k_ds, 10, 30, 3, 'greatest')
+    X_k_ds, _ = range_bin(X_k_ds, N)
+
+    X_k_ds = range_norm(X_k_ds, dist, 1)
+
+    threshold, X_k_ds = cfar(X_k_ds, 0, 3, 1.5, 'greatest')
 
     line1.set_ydata(10 * log10(X_k_ds))
-    return [line1]
+    line2.set_ydata(10 * log10(threshold))
+    return [line1, line2]
 
 if __name__ == '__main__':
     # Apply blackman taper
@@ -265,7 +273,7 @@ if __name__ == '__main__':
     N_test = 20
     N_theta = 360
 
-    POLAR = True 
+    POLAR = True
     FFT = True
     if (POLAR):
         fig = plt.figure()
@@ -277,7 +285,7 @@ if __name__ == '__main__':
             (max_dist, -90, 90))
         ax.set_theta_zero_location('N')
         theta = np.linspace(-pi / 2, -pi / 2 + 2 * pi, N_theta)
-        ranges = np.linspace(1, R_max, N_ds)
+        ranges = np.linspace(1, R_max / 2, N_ds)
         zdata = np.ma.masked_all((N_ds, N_theta))
 
         beamwidth = 20
@@ -300,9 +308,10 @@ if __name__ == '__main__':
         fig, ax = plt.subplots()
         fig.set_figheight(8)
         fig.set_figwidth(16)
-        ax.set_ylim([0, 70])
+        ax.set_ylim([0, 80])
 
         line1, = ax.plot(freq_ds, 10 * log10(X_k_ds))
+        line2, = ax.plot(freq_ds, 10 * log10(X_k_ds), c='r')
         anim = animation.FuncAnimation(fig, fft_animation, 1, interval=1, 
             blit=True, repeat=True)
         plt.show()

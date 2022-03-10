@@ -2,14 +2,14 @@
     Imports
 """
 import numpy as np
-
+from scipy.interpolate import interp1d
 
 """
     Functions
 """
 def cfar(X_k, num_guard_cells, num_ref_cells, bias, cfar_method='average'):
     N = X_k.size
-    cfar_values = np.zeros(X_k.shape)
+    cfar_values = np.ma.masked_all(X_k.shape)
     for center_index in range(num_guard_cells + num_ref_cells, N - (num_guard_cells + num_ref_cells)):
         min_index = center_index - (num_guard_cells + num_ref_cells)
         min_guard = center_index - num_guard_cells 
@@ -33,6 +33,8 @@ def cfar(X_k, num_guard_cells, num_ref_cells, bias, cfar_method='average'):
 
         output = mean * bias
         cfar_values[center_index] = output
+
+    cfar_values[np.where(cfar_values == np.ma.masked)] = np.min(cfar_values)
 
     targets_only = np.ma.masked_array(np.copy(X_k))
     targets_only[np.where(abs(X_k) < abs(cfar_values))] = np.ma.masked
