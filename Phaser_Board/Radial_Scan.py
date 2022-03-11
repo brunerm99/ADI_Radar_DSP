@@ -158,42 +158,50 @@ def downsample(arr, factor):
 def polar_animation(frame):
     global x_n_old, fig, dist
     angle = int(frame * beamwidth / 2)
+    update_phases(my_phaser, angle - 80, output_freq, num_devs=2, num_channels=4)
+
+    x_n_new = my_sdr.rx()
+    x_n_new = x_n_new[0] + x_n_new[1]
+
+    # Coherent change detection (CCD)
+    # Most likely needs TDD engine to work properly
+    # x_n = x_n_new  - x_n_old
+    # x_n_old = x_n_new
+    x_n = x_n_new
+
+    X_k = absolute(fft(x_n))
+    X_k = fftshift(X_k)
+
+    # Only keep positive frequencies until max range specified by user
+    X_k_rs, _ = reduce_array_size(X_k, rs_factor, bb_indices)
+    X_k_ds = X_k_rs
+
+    # Range binning
+    X_k_ds, _ = range_bin(X_k_ds, N)
+
+    # Range normalization
+    X_k_ds = range_norm(X_k_ds, dist, 1)
+
+    # CFAR 
+    _, X_k_ds = cfar(X_k_ds, 1, 3, 3, 'greatest')
+
     if (angle > int(beamwidth / 2)):
-        update_phases(my_phaser, angle - 80, output_freq, num_devs=2, num_channels=4)
-
-        x_n_new = my_sdr.rx()
-        x_n_new = x_n_new[0] + x_n_new[1]
-
-        # Coherent change detection (CCD)
-        # Most likely needs TDD engine to work properly
-        # x_n = x_n_new  - x_n_old
-        # x_n_old = x_n_new
-        x_n = x_n_new
-
-        X_k = absolute(fft(x_n))
-        X_k = fftshift(X_k)
-
-        # Only keep positive frequencies until max range specified by user
-        X_k_rs, _ = reduce_array_size(X_k, rs_factor, bb_indices)
-        X_k_ds = X_k_rs
-
-        # Range binning
-        X_k_ds, _ = range_bin(X_k_ds, N)
-
-        # Range normalization
-        X_k_ds = range_norm(X_k_ds, dist, 1)
-
-        # CFAR 
-        _, X_k_ds = cfar(X_k_ds, 0, 3, 1.5, 'greatest')
-
         X_k_width = np.ma.masked_all((beamwidth, N_ds))
         # X_k_width[:] = interpolate.interp1d(freq_ds, X_k_ds)(freq_ds)
         X_k_width[:] = X_k_ds
 
         zdata[:,angle - int(beamwidth / 2):angle + int(beamwidth / 2)] = X_k_width.T
-        pc.set_array(zdata)
-        # if (angle % 170 == 0):
-        #     fig.savefig('Figures/TestNoNorm.png' )
+    else:
+
+        X_k_width = np.ma.masked_all((int(beamwidth / 2), N_ds))
+        X_k_width[:] = X_k_ds
+
+        zdata[:,angle:angle + int(beamwidth / 2)] = X_k_width.T
+    pc.set_array(zdata)
+    if (angle % 170 == 0):
+        fig.savefig('Figures/PPI_Norm_CFAR_3.png' )
+        print('saved')
+
     return [pc]
 
 def fft_animation(frame):
@@ -207,7 +215,7 @@ def fft_animation(frame):
 
     X_k_ds, _ = range_bin(X_k_ds, N)
 
-    X_k_ds = range_norm(X_k_ds, dist, 1)
+    # X_k_ds = range_norm(X_k_ds, dist, 1)
 
     threshold, X_k_ds = cfar(X_k_ds, 0, 3, 1.5, 'greatest')
 
@@ -281,9 +289,11 @@ if __name__ == '__main__':
         fig.set_figwidth(8)
 
         ax = plt.subplot(111, polar=True)
-        ax.set_title('Max distance: %0.2f\n$%0.2f^\circ < \\theta < %0.2f^\circ$' % 
-            (max_dist, -90, 90))
+        ax.set_title('Max distance: %0.2fm\n$%0.2f^\circ < \\theta < %0.2f^\circ$' % 
+            (max_dist, -90, 90), fontsize=24)
         ax.set_theta_zero_location('N')
+        ax.set_thetamin(-90)
+        ax.set_thetamax(90)
         theta = np.linspace(-pi / 2, -pi / 2 + 2 * pi, N_theta)
         ranges = np.linspace(1, R_max / 2, N_ds)
         zdata = np.ma.masked_all((N_ds, N_theta))
@@ -300,7 +310,7 @@ if __name__ == '__main__':
         fig.colorbar(pc, cmap=cmap, orientation='vertical')
 
         max_frame = int(N_theta / (beamwidth))
-        anim = animation.FuncAnimation(fig, polar_animation, max_frame, interval=0, 
+        anim = animation.FuncAnimation(fig, polar_animation, max_frame, interval=200, 
             blit=True, repeat=True)
         plt.show()
 
