@@ -21,3 +21,6 @@ docs/_build/
 
 # Config file
 phaser_config.py
+
+# Neovim
+tags
