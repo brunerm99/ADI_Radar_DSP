@@ -169,7 +169,7 @@ def polar_animation(frame):
     # x_n_old = x_n_new
     x_n = x_n_new
 
-    X_k = absolute(fft(x_n))
+    X_k = absolute(fft(x_n)) / fft_size 
     X_k = fftshift(X_k)
 
     # Only keep positive frequencies until max range specified by user
@@ -183,7 +183,7 @@ def polar_animation(frame):
     X_k_ds = range_norm(X_k_ds, dist, 1)
 
     # CFAR 
-    _, X_k_ds = cfar(X_k_ds, 1, 3, 3, 'greatest')
+    # _, X_k_ds = cfar(X_k_ds, 1, 3, 3, 'greatest')
 
     if (angle > int(beamwidth / 2)):
         X_k_width = np.ma.masked_all((beamwidth, N_ds))
@@ -198,9 +198,9 @@ def polar_animation(frame):
 
         zdata[:,angle:angle + int(beamwidth / 2)] = X_k_width.T
     pc.set_array(zdata)
-    if (angle % 170 == 0):
-        fig.savefig('Figures/PPI_Norm_CFAR_3.png' )
-        print('saved')
+    # if (angle % 170 == 0):
+    #     fig.savefig('Figures/PPI_Norm_CFAR_3.png' )
+    #     print('saved')
 
     return [pc]
 
@@ -236,7 +236,7 @@ if __name__ == '__main__':
     x_n_old = x_n
     N = x_n.size
 
-    X_k = absolute(fft(x_n))
+    X_k = absolute(fft(x_n)) / fft_size
     X_k = fftshift(X_k)
 
     c = 3e8
@@ -310,7 +310,7 @@ if __name__ == '__main__':
         fig.colorbar(pc, cmap=cmap, orientation='vertical')
 
         max_frame = int(N_theta / (beamwidth))
-        anim = animation.FuncAnimation(fig, polar_animation, max_frame, interval=200, 
+        anim = animation.FuncAnimation(fig, polar_animation, max_frame, interval=0, 
             blit=True, repeat=True)
         plt.show()
 
