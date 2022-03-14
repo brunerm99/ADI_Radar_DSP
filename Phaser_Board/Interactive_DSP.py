@@ -133,19 +133,19 @@ tdd.secondary = False
 tdd.en = True
 
 # buffer size needs to be greater than the frame_time
-frame_time = tdd.frame_length_ms*tdd.burst_count/2
-print("frame_time:", frame_time, "ms")
-buffer_time = 0
-power=12
-while frame_time > buffer_time:     
-    power=power+1
-    buffer_size = int(2**power)
-    buffer_time = buffer_size/my_sdr.sample_rate*1000
-    if power==23:
-        break     # max pluto buffer size is 2**23, but for tdd burst mode, set to 2**22
-print("buffer_size:", buffer_size)
-my_sdr.rx_buffer_size = buffer_size
-print("buffer_time:", buffer_time, " ms")  
+# frame_time = tdd.frame_length_ms*tdd.burst_count/2
+# print("frame_time:", frame_time, "ms")
+# buffer_time = 0
+# power=12
+# while frame_time > buffer_time:     
+#     power=power+1
+#     buffer_size = int(2**power)
+#     buffer_time = buffer_size/my_sdr.sample_rate*1000
+#     if power==23:
+#         break     # max pluto buffer size is 2**23, but for tdd burst mode, set to 2**22
+# print("buffer_size:", buffer_size)
+# my_sdr.rx_buffer_size = buffer_size
+# print("buffer_time:", buffer_time, " ms")  
 
 """
     Print config
