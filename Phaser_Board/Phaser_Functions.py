@@ -30,6 +30,15 @@ def update_phases(my_phaser, scan_angle, output_freq, num_devs=2, num_channels=4
         my_phaser.elements.get(index + 1).rx_phase = phases_deg[index]
     my_phaser.latch_rx_settings()
 
+    # Update each channel with calculated phases
+    # for dev_index, (dev_name, dev_obj) in enumerate(my_phaser.devices.items()):
+    #     for channel_index, channel in enumerate(dev_obj.channels):
+    #         # print('Old: %i-%i: %0.4f degrees' % (dev_index, channel_index, channel.rx_phase))
+    #         channel.rx_phase = phases_deg[(dev_index * num_channels) + channel_index]
+    #         # print('New: %i-%i: %0.4f degrees' % (dev_index, channel_index, channel.rx_phase), 
+    #             # end='\n\n')
+    #         dev_obj.latch_rx_settings()
+
 """
     update_gains()
     Description: Updates each channel's gain given a taper values.
@@ -42,10 +51,18 @@ def update_gains(my_phaser, taper, max_phaser_gain, num_channels=4, num_devs=2):
         my_phaser.elements.get(index + 1).rx_attenuator = not bool(taper[index]) 
     my_phaser.latch_rx_settings()
 
+    # print('Setting gain weights:')
+    # for dev_index, (dev_name, dev_obj) in enumerate(my_phaser.devices.items()):
+    #     for channel_index, channel in enumerate(dev_obj.channels):
+    #         print('Old: %i-%i: %0.4f' % (dev_index, channel_index, channel.rx_gain))
+    #         channel.rx_gain = max_phaser_gain * taper[(dev_index * num_channels) + channel_index]
+    #         print('New: %i-%i: %0.4f' % (dev_index, channel_index, channel.rx_gain), 
+    #             end='\n\n')
+    #         dev_obj.latch_rx_settings()
+
 
 """
     range_bin()
-
 """
 def range_bin(X_k, N_total, BW=500e6, sample_rate=600e3, slope=500e9):
     # Resolution
