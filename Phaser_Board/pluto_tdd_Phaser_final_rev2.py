@@ -309,7 +309,7 @@ for ramp_index in range(0, len(ramps) - 1):
         # recovered_phase_shift = np.arctan((q2 - q1) / (i2 - i1))
 
         phases[index] = recovered_phase_shift
-        V_r = (wavelength * recovered_phase_shift) / (4 * pi / sample_rate) 
+        V_r = (wavelength * recovered_phase_shift) / (4 * pi / ) 
         # print("%0.4f m/s" % V_r)
         vel[index] = V_r
 

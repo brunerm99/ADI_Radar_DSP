@@ -166,7 +166,10 @@ my_sdr._ctx.set_timeout(30000)
 my_sdr._rx_init_channels() 
     
 # %%
-    
+
+# time.sleep(3)    
+print('Collecting...')
+
 # Collect data
 for r in range(5):    # grab several buffers to let the AGC settle
     gpios.gpio_burst = 0
@@ -193,7 +196,8 @@ time = np.linspace(0, ts * N, N)
 
 fig1, ax1 = plt.subplots(figsize=(16, 8))
 ax1.plot(time * 1e3, np.abs(chan1))
-ax1.set_xlabel('Time [ms]')
+ax1.set_title('Received Signal', fontsize=20)
+ax1.set_xlabel('Time [ms]', fontsize=18)
 
 # %%
 """
@@ -208,24 +212,40 @@ for burst in range(num_bursts):
 
 fig1, ax1 = plt.subplots(figsize=(16, 8))
 freq = np.linspace(-fs / 2, fs / 2, index_step)
+
+c = 3e8
+wavelength = c / output_freq
+ramp_time_s = ramp_time / 1e6
+slope = (BW * 4) / ramp_time_s
+dist = freq * c / (2 * slope)
+
 burst_fft_1 = fft(rx_bursts[3])
 burst_fft_2 = fft(rx_bursts[4])
 
-ax1.plot(freq, log10(fftshift(burst_fft_1)), label='First')
-ax1.plot(freq, log10(fftshift(burst_fft_2)), label='Second')
-ax1.set_title('Frequency Spectrum', fontsize=24)
-ax1.set_xlabel('Frequency [Hz]', fontsize=22)
+for burst_index in range(1, num_bursts):
+    burst_fft_tmp = fft(rx_bursts[burst_index])
+
+    # ax1.plot(dist, log10(fftshift(burst_fft_1)), label='First')
+    ax1.plot(dist, log10(fftshift(abs(burst_fft_2))), label=burst_index)
+
+ax1.set_title('Frequency Spectrum\nSpacing: %0.2fms' % (frame_length * 1e3), fontsize=24)
+ax1.set_xlabel('Range [m]]', fontsize=22)
+# ax1.set_xlabel('Frequency [Hz]', fontsize=22)
 ax1.set_ylabel('Magnitude [dB]', fontsize=22)
 ax1.legend(loc='upper right', fontsize=16)
+ax1.set_xlim([-10, 10])
+
+# %%
 
 fig2, ax2 = plt.subplots(figsize=(16, 8))
 
 ccd = rx_bursts[4] - rx_bursts[3]
 ccd_fft = fft(ccd)
-# ax2.plot(freq, log10(fftshift(ccd_fft)))
-ax2.plot(abs(rx_bursts[3]))
-ax2.plot(abs(rx_bursts[4]))
-ax2.set_xlabel('n')
+ax2.plot(freq, log10(fftshift(ccd_fft)))
+# ax2.plot(abs(rx_bursts[3]))
+# ax2.plot(abs(rx_bursts[4]))
+ax2.set_xlabel('n', fontsize=22)
+ax2.set_title('CCD', fontsize=24)
 
 # %%
 """
@@ -235,8 +255,6 @@ ax2.set_xlabel('n')
     4. Calculate velocity from phase difference
 """
 
-c = 3e8
-wavelength = c / output_freq
 lags = signal.correlation_lags(index_step, index_step, mode='full')
 dt = np.linspace(-frame_length, frame_length, 2 * index_step - 1)
 phases = np.zeros(index_step)
@@ -246,7 +264,11 @@ vel = np.zeros(index_step)
 rx_burst_fft_1 = fft(rx_bursts[3])
 rx_burst_fft_2 = fft(rx_bursts[4])
 
-num_points = 10
+num_points = 20
+window_freq = (num_points * 2 + 1) * sample_rate / index_step
+window_range = window_freq * c / (8 * BW)
+print('Window size: %0.2fHz or %0.2fm' % (window_freq, window_range))
+
 
 empty = np.zeros(index_step, dtype=complex)
 for index in range(index_step):
@@ -289,10 +311,6 @@ ax.plot(lags, Rxx)
     Plot time shift, phase shift, and velocity as a function of frequency/distance
 """
 
-ramp_time_s = ramp_time / 1e6
-slope = (BW * 4) / ramp_time_s
-dist = freq * c / (2 * slope)
-
 fig, ax = plt.subplots(figsize=(16, 8))
 ax2 = ax.twinx()
 ax.plot(dist, fftshift(time_shifts))
@@ -309,9 +327,9 @@ ax2.set_ylabel('Phase shift [rad]')
 fig, ax = plt.subplots(figsize=(16, 8))
 ax.plot(dist, fftshift(vel))
 ax.set_xlim([0, 30])
-ax.set_title('Range-Velocity')
-ax.set_xlabel('Distance [m]')
-ax.set_ylabel('Velocity [m/s]')
+ax.set_title('Range-Velocity', fontsize=24)
+ax.set_xlabel('Distance [m]', fontsize=22)
+ax.set_ylabel('Velocity [m/s]', fontsize=22)
 
 # %%
 
