@@ -7,7 +7,8 @@ from scipy.interpolate import interp1d
 """
     Functions
 """
-def cfar(X_k, num_guard_cells, num_ref_cells, bias, cfar_method='average'):
+def cfar(X_k, num_guard_cells, num_ref_cells, bias=1, cfar_method='average',
+    fa_rate=0.2):
     N = X_k.size
     cfar_values = np.ma.masked_all(X_k.shape)
     for center_index in range(num_guard_cells + num_ref_cells, N - (num_guard_cells + num_ref_cells)):
@@ -24,14 +25,20 @@ def cfar(X_k, num_guard_cells, num_ref_cells, bias, cfar_method='average'):
 
         if (cfar_method == 'average'):
             mean = np.mean(np.concatenate((lower_nearby, upper_nearby)))
+            output = mean * bias
         elif (cfar_method == 'greatest'):
             mean = max(lower_mean, upper_mean)
+            output = mean * bias
         elif (cfar_method == 'smallest'):
             mean = min(lower_mean, upper_mean)
+            output = mean * bias
+        elif (cfar_method == 'false_alarm'):
+            refs = np.concatenate((lower_nearby, upper_nearby))
+            noise_variance = np.sum(refs**2 / refs.size)
+            output = (noise_variance * -2 * np.log(fa_rate))**0.5
         else:
-            mean = 0
+            raise Exception('No CFAR method received')
 
-        output = mean * bias
         cfar_values[center_index] = output
 
     cfar_values[np.where(cfar_values == np.ma.masked)] = np.min(cfar_values)
@@ -39,4 +46,7 @@ def cfar(X_k, num_guard_cells, num_ref_cells, bias, cfar_method='average'):
     targets_only = np.ma.masked_array(np.copy(X_k))
     targets_only[np.where(abs(X_k) < abs(cfar_values))] = np.ma.masked
 
-    return cfar_values, targets_only
+    if (cfar_method == 'false_alarm'):
+        return cfar_values, targets_only, noise_variance
+    else:
+        return cfar_values, targets_only
