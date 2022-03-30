@@ -194,12 +194,12 @@ def fft_animation():
     X_k_ds = X_k
     X_k_ds, _ = reduce_array_size(X_k, rs_factor, bb_indices)
 
-    X_k_ds, d_res = range_bin(X_k_ds, N)
+    # X_k_ds, d_res = range_bin(X_k_ds, N)
     N_ds = X_k_ds.size
 
     # _, X_k_ds = cfar(X_k_ds, 10, 30, 3, 'greatest')
 
-    X_k_ds = range_norm(X_k_ds, dist, 1)
+    # X_k_ds = range_norm(X_k_ds, dist, 1)
     X_k_dbfs = 20 * log10(X_k_ds / 2**12)
     curve.setData(freq_ds, X_k_dbfs)
 
@@ -243,10 +243,10 @@ if __name__ == '__main__':
     X_k_ds, N_ds = reduce_array_size(X_k, rs_factor, bb_indices)
     freq_ds, _ = reduce_array_size(freq, rs_factor, bb_indices)
 
-    X_k_ds, d_res = range_bin(X_k_ds, N)
+    # X_k_ds, d_res = range_bin(X_k_ds, N)
     N_ds = X_k_ds.size
     freq_ds = np.linspace(signal_freq, max_freq, N_ds)
-    print('Range bins: %i @ %0.2fm' % (N_ds, d_res))
+    # print('Range bins: %i @ %0.2fm' % (N_ds, d_res))
 
     # Create range-FFT scale
     dist = (c / slope) * (freq_ds - signal_freq) # meters
@@ -304,7 +304,7 @@ if __name__ == '__main__':
         p.setLabel('left', 'Magnitude', units='dBFS')
         p.setTitle('Received Signal - Frequency Spectrum')
         p.setYRange(0, 70)
-        X_k_ds = range_norm(X_k_ds, dist, 1)
+        # X_k_ds = range_norm(X_k_ds, dist, 1)
         X_k_dbfs = 20 * log10(X_k_ds / 2**12)
         curve = p.plot(freq_ds, X_k_dbfs)
 

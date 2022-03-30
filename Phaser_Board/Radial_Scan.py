@@ -172,6 +172,10 @@ def polar_animation(frame):
     X_k = absolute(fft(x_n)) / fft_size 
     X_k = fftshift(X_k)
 
+    Rxx = signal.correlate(x_n, x_n, mode='full')
+    PSD = fft(Rxx)
+    X_k = PSD
+
     # Only keep positive frequencies until max range specified by user
     X_k_rs, _ = reduce_array_size(X_k, rs_factor, bb_indices)
     X_k_ds = X_k_rs
@@ -180,7 +184,7 @@ def polar_animation(frame):
     X_k_ds, _ = range_bin(X_k_ds, N)
 
     # Range normalization
-    X_k_ds = range_norm(X_k_ds, dist, 1)
+    # X_k_ds = range_norm(X_k_ds, dist, 1)
 
     # CFAR 
     # _, X_k_ds = cfar(X_k_ds, 1, 3, 3, 'greatest')
@@ -197,7 +201,7 @@ def polar_animation(frame):
         X_k_width[:] = X_k_ds
 
         zdata[:,angle:angle + int(beamwidth / 2)] = X_k_width.T
-    pc.set_array(zdata)
+    pc.set_array(10 * log10(zdata))
     # if (angle % 170 == 0):
     #     fig.savefig('Figures/PPI_Norm_CFAR_3.png' )
     #     print('saved')
@@ -234,10 +238,15 @@ if __name__ == '__main__':
     x_n = my_sdr.rx()
     x_n = x_n[0] + x_n[1]
     x_n_old = x_n
-    N = x_n.size
 
     X_k = absolute(fft(x_n)) / fft_size
     X_k = fftshift(X_k)
+
+    Rxx = signal.correlate(x_n, x_n, mode='full')
+    PSD = fft(Rxx)
+    X_k = PSD
+
+    N = X_k.size
 
     c = 3e8
     slope = BW / ramp_time_s
@@ -302,10 +311,10 @@ if __name__ == '__main__':
         # X_k_width = np.ma.masked_all((beamwidth, N_ds))
         # X_k_width[:] = 10 * log10(X_k_ds)
 
-        X_k_ds = range_norm(X_k_ds, dist, 1)
+        # X_k_ds = range_norm(X_k_ds, dist, 1)
         zdata[:,5] = X_k_ds
 
-        pc = ax.pcolormesh(theta, ranges, zdata)
+        pc = ax.pcolormesh(theta, ranges, 10 * log10(zdata))
         cmap = matplotlib.cm.get_cmap('cet_CET_L20')
         fig.colorbar(pc, cmap=cmap, orientation='vertical')
 
