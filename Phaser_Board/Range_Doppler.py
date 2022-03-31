@@ -136,7 +136,7 @@ my_phaser.enable = 0                 # 0 = PLL enable.  Write this last to updat
 # Configure TDD controller
 tdd = adi.tdd(sdr_ip)
 tdd.frame_length_ms = 4    # each GPIO toggle is spaced 4ms apart
-tdd.burst_count = 20 # there is a burst of 20 toggles, then off for a long time
+tdd.burst_count = 40 # there is a burst of 20 toggles, then off for a long time
 tdd.rx_rf_ms = [0.5,0.9, 0, 0]    # each GPIO pulse will be 100us (0.6ms - 0.5ms).  And the first trigger will happen 0.5ms into the buffer
 tdd.secondary = False
 tdd.en = True
@@ -228,7 +228,6 @@ ramp_time_s = ramp_time / 1e6
 slope = (BW * 4) / ramp_time_s
 dist = (freq - signal_freq) * c / (2 * slope)
 
-# %%
 
 # Resolutions
 R_res = c / (2 * (BW * 4))
@@ -243,6 +242,8 @@ max_doppler_vel = max_doppler_freq * wavelength / 2
 rx_bursts_fft = fftshift(abs(fft2(rx_bursts)))
 thresholds = np.zeros(rx_bursts_fft.shape)
 rx_bursts_fft_cfar = np.ma.masked_all(rx_bursts_fft.shape)
+
+# %%
 
 # Uncomment to perform CFAR thresholding before plotting
 # This significantly increases run time
@@ -289,24 +290,36 @@ ax.set_title('Range Doppler Spectrum', fontsize=24)
 ax.set_xlabel('Velocity [m/s]', fontsize=22)
 ax.set_ylabel('Range [m]', fontsize=22)
 
-max_range = 15
+max_range = 10
 ax.set_ylim([0, max_range])
 ax.set_yticks(np.arange(0, max_range, 2))
-colorbar = fig.colorbar(range_doppler, cmap=get_cmap('bwr'), 
-    orientation='vertical')
-colorbar.set_label(label='Magnitude [dB]', size=22)
+plt.xticks(fontsize=16)
+plt.yticks(fontsize=16)
+# colorbar = fig.colorbar(range_doppler, cmap=get_cmap('bwr'), 
+#     orientation='vertical')
+# colorbar.set_label(label='Magnitude [dB]', size=22)
 
-fig.savefig('Figures/Range_Doppler_Moving_next2_Refl_0-%i_bwr.png' % (max_range)) #, facecolor='w')
+fig.savefig('Figures/Range_Doppler_Moving_Backward_Refl_0-%i_bwr_hires.png' % (max_range)) #, facecolor='w')
+# fig.savefig('Figures/Range_Doppler_Moving_Forward_Refl_0-%i_bwr_hires.png' % (max_range)) #, facecolor='w')
+# fig.savefig('Figures/Range_Doppler_Stationary_Refl_0-%i_bwr.png' % (max_range)) #, facecolor='w')
+
+# %%
+# Get colorbar separately
+colorbar = fig.colorbar(range_doppler, cmap=get_cmap('bwr'), 
+    orientation='horizontal')
+colorbar.set_label(label='Magnitude [dB]', size=22)
+ax.remove()
+fig.savefig('Figures/Range_Doppler_Colorbar_bwr.png', bbox_inches='tight') #, facecolor='w')
 
 # %%
 # 3D Plot
-print('Plotting 3D')
-X = np.linspace(dist.min(), dist.max(), rx_bursts_fft.shape[1])
-Y = np.arange(-max_doppler_vel, max_doppler_vel, rx_bursts_fft.shape[0])
-X, Y = np.meshgrid(X, Y)
+# print('Plotting 3D')
+# X = np.linspace(dist.min(), dist.max(), rx_bursts_fft.shape[1])
+# Y = np.arange(-max_doppler_vel, max_doppler_vel, rx_bursts_fft.shape[0])
+# X, Y = np.meshgrid(X, Y)
 
-fig = plt.figure()
-ax = plt.axes(projection='3d')
-ax.plot(X, Y, log10(rx_bursts_fft), cmap=get_cmap('bwr'), vmin=2, vmax=7)
-# ax.set_xlim([0, 15])
+# fig = plt.figure()
+# ax = plt.axes(projection='3d')
+# ax.plot(X, Y, log10(rx_bursts_fft), cmap=get_cmap('bwr'), vmin=2, vmax=7)
+# # ax.set_xlim([0, 15])
 plt.show()
