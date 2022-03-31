@@ -297,4 +297,16 @@ colorbar = fig.colorbar(range_doppler, cmap=get_cmap('bwr'),
 colorbar.set_label(label='Magnitude [dB]', size=22)
 
 fig.savefig('Figures/Range_Doppler_Moving_next2_Refl_0-%i_bwr.png' % (max_range)) #, facecolor='w')
+
+# %%
+# 3D Plot
+print('Plotting 3D')
+X = np.linspace(dist.min(), dist.max(), rx_bursts_fft.shape[1])
+Y = np.arange(-max_doppler_vel, max_doppler_vel, rx_bursts_fft.shape[0])
+X, Y = np.meshgrid(X, Y)
+
+fig = plt.figure()
+ax = plt.axes(projection='3d')
+ax.plot(X, Y, log10(rx_bursts_fft), cmap=get_cmap('bwr'), vmin=2, vmax=7)
+# ax.set_xlim([0, 15])
 plt.show()
