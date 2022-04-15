@@ -34,12 +34,16 @@
 
 '''To test this script, shine a 10.5GHz HB100 source on the array'''
 
+import sys
+sys.path.insert(0, '/home/marchall/documents/chill/pyadi-iio')
+sys.path.insert(0, '/home/marchall/documents/chill/ADI_Radar_DSP')
+
 from operator import index
 import matplotlib.pyplot as plt
 from matplotlib.cm import get_cmap
 import numpy as np
 from numpy import log10
-from numpy.fft import fft, ifft, fftshift, fft2
+from numpy.fft import fft, ifft, fftshift, ifftshift, fft2, ifft2
 from scipy import signal
 import target_detection
 import adi
@@ -167,7 +171,6 @@ i = np.cos(2 * np.pi * t * fc) * 2 ** 14
 q = np.sin(2 * np.pi * t * fc) * 2 ** 14
 iq = 0.9* (i + 1j * q)
 
-
 my_sdr._ctx.set_timeout(30000)
 my_sdr._rx_init_channels() 
 
@@ -206,6 +209,8 @@ ax1.plot(time * 1e3, np.abs(chan1))
 ax1.set_title('Received Signal', fontsize=20)
 ax1.set_xlabel('Time [ms]', fontsize=18)
 
+plt.show()
+
 # %%
 # Split into frames
 N_frame = int(PRI / ts)
@@ -215,13 +220,13 @@ rx_bursts = np.zeros((num_bursts, N_frame), dtype=complex)
 start_offset_time = 0.5e-3
 start_offset_index = int((start_offset_time / (frame_time / 1e3)) * N_frame)
 
-# fig, ax = plt.subplots(figsize=(16, 8))
 for burst in range(num_bursts):
     rx_bursts[burst] = chan1[start_offset_index + (burst + 1) * N_frame:
         start_offset_index + (burst + 2) * N_frame]
-    # ax.plot(abs(rx_bursts[burst]))
 
 freq = np.linspace(-fs / 2, fs / 2, N_frame)
+
+# %%
 
 # Obtain range-FFT x-axis
 c = 3e8
@@ -229,7 +234,6 @@ wavelength = c / output_freq
 ramp_time_s = ramp_time / 1e6
 slope = (BW * 4) / ramp_time_s
 dist = (freq - signal_freq) * c / (2 * slope)
-
 
 # Resolutions
 R_res = c / (2 * (BW * 4))
@@ -239,89 +243,155 @@ v_res = wavelength / (2 * num_bursts * PRI)
 PRF = 1 / PRI
 max_doppler_freq = PRF / 2
 max_doppler_vel = max_doppler_freq * wavelength / 2
+velocity_axis = np.linspace(-max_doppler_vel, max_doppler_vel, num_bursts)
 
 # %%
-rx_bursts_fft = fftshift(abs(fft2(rx_bursts)))
-thresholds = np.zeros(rx_bursts_fft.shape)
-rx_bursts_fft_cfar = np.ma.masked_all(rx_bursts_fft.shape)
-
-# %%
-
-# Uncomment to perform CFAR thresholding before plotting
-# This significantly increases run time
 """
-# CFAR for entire range Doppler spectrum
-fig, ax = plt.subplots(figsize=(16, 8))
-for m in range(num_bursts):
-    threshold, targets, noise = target_detection.cfar(rx_bursts_fft[m], 
-        num_guard_cells=5, num_ref_cells=10, cfar_method='false_alarm', 
-        fa_rate=0.05)
-    thresholds[m] = threshold
-    if (m % 4 == 0):
-        ax.plot(dist, log10(targets), label=m)
-    rx_bursts_fft_cfar[m] = targets
-
-ax.plot(dist, log10(rx_bursts_fft_cfar[4]), label='target')
-ax.plot(dist, log10(thresholds[4]), label='threshold')
-ax.legend(loc='upper right', fontsize=16)
-
-# Plot frames overlayed frequency spectrum
-# for burst_index in range(1, num_bursts):
-#     if (burst_index % 4 == 0):
-#         ax.plot(dist, log10(fftshift(abs(rx_bursts_fft[burst_index]))), label=burst_index)
-
-ax.set_title('Overlaid Frequency Spectrum\nSpacing: %0.2fms' % (PRI * 1e3), fontsize=24)
-ax.set_xlabel('Range [m]', fontsize=22)
-# ax.set_xlabel('Frequency [Hz]', fontsize=22)
-ax.set_ylabel('Magnitude [dB]', fontsize=22)
-# ax.set_xlim([70e3, 130e3])
-ax.set_xlim([0, 10])
-ax.legend(loc='upper right', fontsize=16)
-
-# rx_bursts_fft[np.where(log10(rx_bursts) < 3)] = 0
+    Plot range-Doppler spectrum - no filtering
 """
+rx_bursts_fft = fft2(rx_bursts)
 
-# %%
 fig, ax = plt.subplots(figsize=(16, 16))
-
-extent = [-max_doppler_vel, max_doppler_vel, dist.min(), dist.max()]
-range_doppler = ax.imshow(log10(rx_bursts_fft).T, aspect='auto', 
-    extent=extent, origin='lower', cmap=get_cmap('bwr'), vmin=2, vmax=7)
-
-ax.set_title('Range Doppler Spectrum', fontsize=24)
-ax.set_xlabel('Velocity [m/s]', fontsize=22)
-ax.set_ylabel('Range [m]', fontsize=22)
-
+ax.set_title('Range Doppler Spectrum', fontsize=30)
+ax.set_xlabel('Velocity [m/s]', fontsize=28)
+ax.set_ylabel('Range [m]', fontsize=28)
 max_range = 10
 ax.set_ylim([0, max_range])
 ax.set_yticks(np.arange(0, max_range, 2))
-plt.xticks(fontsize=16)
-plt.yticks(fontsize=16)
-# colorbar = fig.colorbar(range_doppler, cmap=get_cmap('bwr'), 
+plt.xticks(fontsize=24)
+plt.yticks(fontsize=24)
+
+extent = [-max_doppler_vel, max_doppler_vel, dist.min(), dist.max()]
+range_doppler = ax.imshow(10 * log10(fftshift(abs(rx_bursts_fft))).T, aspect='auto', 
+    extent=extent, origin='lower', cmap=get_cmap('gist_rainbow'), vmin=30, vmax=70)
+# colorbar = fig.colorbar(range_doppler, 
+#     orientation='horizontal')
+# colorbar.set_label(label='Magnitude [dB]', size=22)
+
+
+
+fig.savefig('Figures/Clutter/Range_Doppler_No_CF.png', bbox_inches='tight')
+
+# %%
+# Generate colorbar separately and save
+colorbar = fig.colorbar(range_doppler, cmap=get_cmap('bwr'), 
+    orientation='horizontal')
+colorbar.set_label(label='Magnitude [dB]', size=22)
+range_doppler.figure.axes[1].tick_params(axis="x", labelsize=18)
+ax.remove()
+fig.savefig('Figures/Clutter/Range_Doppler_Colorbar.png', bbox_inches='tight')
+
+# %%
+"""
+    Do some zero-Doppler filtering and plot
+"""
+
+max_clutter_vel = 0.1 # m/s
+rx_bursts_cf_fft = fftshift(rx_bursts_fft.copy())
+rx_bursts_cf_fft[np.where((velocity_axis > -max_clutter_vel) & 
+    (velocity_axis < max_clutter_vel))] = 0
+
+fig, ax = plt.subplots(figsize=(16, 16))
+ax.set_title('Range Doppler Spectrum\nClutter Filtered @ $-%0.2f<v<%0.2fms^{-1}$' % 
+    (max_clutter_vel, max_clutter_vel), fontsize=30)
+ax.set_xlabel('Velocity [m/s]', fontsize=28)
+ax.set_ylabel('Range [m]', fontsize=28)
+max_range = 10
+ax.set_ylim([0, max_range])
+ax.set_yticks(np.arange(0, max_range, 2))
+plt.xticks(fontsize=24)
+plt.yticks(fontsize=24)
+
+range_doppler_cf = ax.imshow(10 * log10(abs(rx_bursts_cf_fft)).T, aspect='auto', 
+    extent=extent, origin='lower', cmap=get_cmap('bwr'), vmin=20, vmax=70)
+
+# colorbar = fig.colorbar(range_doppler_cf, cmap=get_cmap('bwr'), 
 #     orientation='vertical')
 # colorbar.set_label(label='Magnitude [dB]', size=22)
 
-# fig.savefig('Figures/Range_Doppler_Moving_Backward_Refl_0-%i_bwr_hires.png' % (max_range)) #, facecolor='w')
-# fig.savefig('Figures/Range_Doppler_Moving_Forward_Refl_0-%i_bwr_hires.png' % (max_range)) #, facecolor='w')
-# fig.savefig('Figures/Range_Doppler_Stationary_Refl_0-%i_bwr_hires.png' % (max_range)) #, facecolor='w')
+fig.savefig('Figures/Clutter/Range_Doppler_CF.png', bbox_inches='tight')
 
 # %%
-# Get colorbar separately
-# colorbar = fig.colorbar(range_doppler, cmap=get_cmap('bwr'), 
-#     orientation='horizontal')
-# colorbar.set_label(label='Magnitude [dB]', size=22)
-# ax.remove()
-# fig.savefig('Figures/Range_Doppler_Colorbar_bwr.png', bbox_inches='tight') #, facecolor='w')
+rx_bursts_cf = ifft2(ifftshift(rx_bursts_cf_fft))
+
+i = 7
+test_fft = fft(rx_bursts[i])
+test_fft_cf = fft(rx_bursts_cf[i])
+
+# fig, (ax1, ax2) = plt.subplots(2, 1, figsize=(16, 16))
+# plt.suptitle('Comparison of Range-FFT Spectrum\nWith and Without Clutter Filtering', 
+#     fontsize=26)
+fig1, ax1 = plt.subplots(figsize=(16, 8))
+plt.xticks(fontsize=16)
+plt.yticks(fontsize=16)
+fig2, ax2 = plt.subplots(figsize=(16, 8))
+plt.xticks(fontsize=16)
+plt.yticks(fontsize=16)
+ax1.set_title('Range-FFT Spectrum\nNo Clutter Filter', fontsize=24)
+ax2.set_title('Range-FFT Spectrum\nClutter Filter', fontsize=24)
+ax1.set_xlabel('Range [m]', fontsize=22)
+# ax2.set_xlabel('Frequency [kHz]', fontsize=22)
+ax2.set_xlabel('Range [m]', fontsize=22)
+ax1.set_ylabel('Magnitude [dB]', fontsize=22)
+ax2.set_ylabel('Magnitude [dB]', fontsize=22)
+ax1.plot(dist, 10 * log10(fftshift(abs(test_fft))), label='No Filter', c='b')
+ax2.plot(dist, 10 * log10(fftshift(abs(test_fft_cf))), label='Clutter Filtered', c='b')
+
+xlim = np.array([-max_range, max_range]) 
+ax1.set_xlim(xlim)
+ax2.set_xlim(xlim)
+
+ylim = [20, 70]
+ax1.set_ylim(ylim)
+ax2.set_ylim(ylim)
+
+subdist = np.where((dist > 0.5) & (dist < 2.5))
+y2_target = 10 * log10(abs(fftshift(test_fft_cf)[subdist].max()))
+target_index = np.where(10 * log10(abs(fftshift(test_fft_cf))) == y2_target)
+x1_target = dist[target_index]
+x2_target = dist[target_index]
+y1_target = 10 * log10(abs(fftshift(test_fft_cf)))[target_index]
+
+ax1.annotate('Target', xy=(x1_target, y1_target), xycoords='data',
+    xytext=(x1_target + 0.5, y1_target + 5), textcoords='data',
+    arrowprops = dict(
+            connectionstyle='arc3,rad=0.',
+            shrinkA=0, shrinkB=0,
+            arrowstyle='-|>', ls='-', linewidth=3
+        ), fontsize=22)
+ax2.annotate('Target', xy=(x2_target, y2_target), xycoords='data',
+    xytext=(x2_target + 0.5, y2_target + 5), textcoords='data',
+    arrowprops = dict(
+            connectionstyle='arc3,rad=0.',
+            shrinkA=0, shrinkB=0,
+            arrowstyle='-|>', ls='-', linewidth=3
+        ), fontsize=22)
+
+
+fig1.savefig('Figures/Clutter/Without_CF.png', bbox_inches='tight')
+fig2.savefig('Figures/Clutter/With_CF.png', bbox_inches='tight')
 
 # %%
-# 3D Plot
-# print('Plotting 3D')
-# X = np.linspace(dist.min(), dist.max(), rx_bursts_fft.shape[1])
-# Y = np.arange(-max_doppler_vel, max_doppler_vel, rx_bursts_fft.shape[0])
-# X, Y = np.meshgrid(X, Y)
-
-# fig = plt.figure()
-# ax = plt.axes(projection='3d')
-# ax.plot(X, Y, log10(rx_bursts_fft), cmap=get_cmap('bwr'), vmin=2, vmax=7)
-# # ax.set_xlim([0, 15])
 plt.show()
+
+
+# Plot frequnecy domain stackplot
+fig, ax = plt.subplots(figsize=(16, 8))
+
+rx_bursts_fft = np.zeros(rx_bursts.shape)
+for index, rx_burst in enumerate(rx_bursts):
+    rx_bursts_fft[index] = log10(fftshift(abs(fft(rx_burst))))
+
+ax.stackplot(freq / 1e6, *(rx_bursts_fft[2:10]))
+ax.set_xlim([signal_freq - 100e3, signal_freq + 100e3])
+ax.set_xlim([signal_freq / 1e6 - 0.1, signal_freq / 1e6 + 0.1])
+ax.set_ylabel('Slow time', fontsize=22)
+ax.set_xlabel('Frequency [MHz]\nDFT of Fast Time', fontsize=22)
+ax.set_title('Stack plot of all M buffers', fontsize=24)
+plt.tick_params(axis='y', left=False, which='both', labelleft=False)
+plt.xticks(size=16)
+plt.yticks(size=16)
+
+fig.savefig('Figures/Stack_Plot.png')
+
+# plt.show()

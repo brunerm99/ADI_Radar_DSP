@@ -37,6 +37,7 @@
 from operator import index
 import matplotlib.pyplot as plt
 from matplotlib.cm import get_cmap
+from matplotlib.animation import FuncAnimation
 import numpy as np
 from numpy import log10
 from numpy.fft import fft, ifft, fftshift, fft2
@@ -172,6 +173,9 @@ my_sdr._ctx.set_timeout(30000)
 my_sdr._rx_init_channels() 
 
 # %%    
+"""
+    Collect initial frame and plot it in time domain to ensure it's working properly
+"""
 # Send data
 my_sdr.tx([iq, iq])  # only send data to the 2nd channel (that's all we need)
 
@@ -201,10 +205,10 @@ N = chan1.size
 time = np.linspace(0, ts * N, N)
 
 # Plot full time domain signal
-fig1, ax1 = plt.subplots(figsize=(16, 8))
-ax1.plot(time * 1e3, np.abs(chan1))
-ax1.set_title('Received Signal', fontsize=20)
-ax1.set_xlabel('Time [ms]', fontsize=18)
+# fig1, ax1 = plt.subplots(figsize=(16, 8))
+# ax1.plot(time * 1e3, np.abs(chan1))
+# ax1.set_title('Received Signal', fontsize=20)
+# ax1.set_xlabel('Time [ms]', fontsize=18)
 
 # %%
 # Split into frames
@@ -215,11 +219,9 @@ rx_bursts = np.zeros((num_bursts, N_frame), dtype=complex)
 start_offset_time = 0.5e-3
 start_offset_index = int((start_offset_time / (frame_time / 1e3)) * N_frame)
 
-# fig, ax = plt.subplots(figsize=(16, 8))
 for burst in range(num_bursts):
     rx_bursts[burst] = chan1[start_offset_index + (burst + 1) * N_frame:
         start_offset_index + (burst + 2) * N_frame]
-    # ax.plot(abs(rx_bursts[burst]))
 
 freq = np.linspace(-fs / 2, fs / 2, N_frame)
 
@@ -230,62 +232,23 @@ ramp_time_s = ramp_time / 1e6
 slope = (BW * 4) / ramp_time_s
 dist = (freq - signal_freq) * c / (2 * slope)
 
-
 # Resolutions
 R_res = c / (2 * (BW * 4))
 v_res = wavelength / (2 * num_bursts * PRI)
 
-# Doppler spectrum
+# Doppler spectrum limits
 PRF = 1 / PRI
 max_doppler_freq = PRF / 2
 max_doppler_vel = max_doppler_freq * wavelength / 2
 
 # %%
-rx_bursts_fft = fftshift(abs(fft2(rx_bursts)))
-thresholds = np.zeros(rx_bursts_fft.shape)
-rx_bursts_fft_cfar = np.ma.masked_all(rx_bursts_fft.shape)
+rx_bursts_fft = fft2(rx_bursts)
 
 # %%
-
-# Uncomment to perform CFAR thresholding before plotting
-# This significantly increases run time
-"""
-# CFAR for entire range Doppler spectrum
-fig, ax = plt.subplots(figsize=(16, 8))
-for m in range(num_bursts):
-    threshold, targets, noise = target_detection.cfar(rx_bursts_fft[m], 
-        num_guard_cells=5, num_ref_cells=10, cfar_method='false_alarm', 
-        fa_rate=0.05)
-    thresholds[m] = threshold
-    if (m % 4 == 0):
-        ax.plot(dist, log10(targets), label=m)
-    rx_bursts_fft_cfar[m] = targets
-
-ax.plot(dist, log10(rx_bursts_fft_cfar[4]), label='target')
-ax.plot(dist, log10(thresholds[4]), label='threshold')
-ax.legend(loc='upper right', fontsize=16)
-
-# Plot frames overlayed frequency spectrum
-# for burst_index in range(1, num_bursts):
-#     if (burst_index % 4 == 0):
-#         ax.plot(dist, log10(fftshift(abs(rx_bursts_fft[burst_index]))), label=burst_index)
-
-ax.set_title('Overlaid Frequency Spectrum\nSpacing: %0.2fms' % (PRI * 1e3), fontsize=24)
-ax.set_xlabel('Range [m]', fontsize=22)
-# ax.set_xlabel('Frequency [Hz]', fontsize=22)
-ax.set_ylabel('Magnitude [dB]', fontsize=22)
-# ax.set_xlim([70e3, 130e3])
-ax.set_xlim([0, 10])
-ax.legend(loc='upper right', fontsize=16)
-
-# rx_bursts_fft[np.where(log10(rx_bursts) < 3)] = 0
-"""
-
-# %%
-fig, ax = plt.subplots(figsize=(16, 16))
+range_doppler_fig, ax = plt.subplots(figsize=(16, 16))
 
 extent = [-max_doppler_vel, max_doppler_vel, dist.min(), dist.max()]
-range_doppler = ax.imshow(log10(rx_bursts_fft).T, aspect='auto', 
+range_doppler = ax.imshow(log10(fftshift(abs(rx_bursts_fft))).T, aspect='auto', 
     extent=extent, origin='lower', cmap=get_cmap('bwr'), vmin=2, vmax=7)
 
 ax.set_title('Range Doppler Spectrum', fontsize=24)
@@ -297,31 +260,41 @@ ax.set_ylim([0, max_range])
 ax.set_yticks(np.arange(0, max_range, 2))
 plt.xticks(fontsize=16)
 plt.yticks(fontsize=16)
-# colorbar = fig.colorbar(range_doppler, cmap=get_cmap('bwr'), 
-#     orientation='vertical')
-# colorbar.set_label(label='Magnitude [dB]', size=22)
+colorbar = range_doppler_fig.colorbar(range_doppler, cmap=get_cmap('bwr'), 
+    orientation='vertical')
+colorbar.set_label(label='Magnitude [dB]', size=22)
 
-# fig.savefig('Figures/Range_Doppler_Moving_Backward_Refl_0-%i_bwr_hires.png' % (max_range)) #, facecolor='w')
-# fig.savefig('Figures/Range_Doppler_Moving_Forward_Refl_0-%i_bwr_hires.png' % (max_range)) #, facecolor='w')
-# fig.savefig('Figures/Range_Doppler_Stationary_Refl_0-%i_bwr_hires.png' % (max_range)) #, facecolor='w')
+"""
+    Now keep updating the range-Doppler spectrum
+"""
+def gen_spectrum(frame):
+    my_sdr.tx([iq, iq])  # only send data to the 2nd channel (that's all we need)
 
-# %%
-# Get colorbar separately
-# colorbar = fig.colorbar(range_doppler, cmap=get_cmap('bwr'), 
-#     orientation='horizontal')
-# colorbar.set_label(label='Magnitude [dB]', size=22)
-# ax.remove()
-# fig.savefig('Figures/Range_Doppler_Colorbar_bwr.png', bbox_inches='tight') #, facecolor='w')
+    print("Collecting")
+    # Collect data
+    # for r in range(1):    # grab several buffers to let the AGC settle
+    gpios.gpio_burst = 0
+    gpios.gpio_burst = 1
+    # time.sleep(0.001)
+    gpios.gpio_burst = 0
+    
+    data = my_sdr.rx()
+    
+    chan1 = data[0]
+    chan2 = data[1]
+        
+    my_sdr.tx_destroy_buffer()
+    print('done')
 
-# %%
-# 3D Plot
-# print('Plotting 3D')
-# X = np.linspace(dist.min(), dist.max(), rx_bursts_fft.shape[1])
-# Y = np.arange(-max_doppler_vel, max_doppler_vel, rx_bursts_fft.shape[0])
-# X, Y = np.meshgrid(X, Y)
+    # Split into frames starting at offset
+    for burst in range(num_bursts):
+        rx_bursts[burst] = chan1[start_offset_index + (burst + 1) * N_frame:
+            start_offset_index + (burst + 2) * N_frame]
 
-# fig = plt.figure()
-# ax = plt.axes(projection='3d')
-# ax.plot(X, Y, log10(rx_bursts_fft), cmap=get_cmap('bwr'), vmin=2, vmax=7)
-# # ax.set_xlim([0, 15])
+    rx_bursts_fft = fft2(rx_bursts)
+    range_doppler.set_data(log10(fftshift(abs(rx_bursts_fft))).T)
+    
+    return [range_doppler]
+
+anim = FuncAnimation(range_doppler_fig, gen_spectrum, blit=True, repeat_delay=0)
 plt.show()

@@ -51,7 +51,6 @@ reload(target_detection)
 # %%
 
 import time
-from time import sleep
 
 # Instantiate all the Devices
 try:
@@ -77,9 +76,9 @@ time.sleep(0.5)
 
 # Parameters
 sample_rate = 0.6e6
-sample_rate = 10e6 
+sample_rate = 3e6
 center_freq = 2.1e9
-signal_freq = 1e6 
+signal_freq = 100e3
 num_slices = 200
 fft_size = 1024*16
 
@@ -99,7 +98,7 @@ my_sdr.tx_lo = int(center_freq)
 my_sdr.tx_enabled_channels = [0, 1]
 my_sdr.tx_cyclic_buffer = True      # must set cyclic buffer to true for the tdd burst mode.  Otherwise Tx will turn on and off randomly
 my_sdr.tx_hardwaregain_chan0 = -88   # must be between 0 and -88
-my_sdr.tx_hardwaregain_chan1 = -3   # must be between 0 and -88
+my_sdr.tx_hardwaregain_chan1 = -0   # must be between 0 and -88
 
 # Read properties
 print("RX LO %s" % (my_sdr.rx_lo))
@@ -132,11 +131,11 @@ my_phaser.tx_trig_en = 1             # start a ramp with TXdata
 #my_phaser.phase_value = 3
 my_phaser.enable = 0                 # 0 = PLL enable.  Write this last to update all the registers
 
-# %%
+
 # Configure TDD controller
 tdd = adi.tdd(sdr_ip)
 tdd.frame_length_ms = 4    # each GPIO toggle is spaced 4ms apart
-tdd.burst_count = 40 # there is a burst of 20 toggles, then off for a long time
+tdd.burst_count = 20 # there is a burst of 20 toggles, then off for a long time
 tdd.rx_rf_ms = [0.5,0.9, 0, 0]    # each GPIO pulse will be 100us (0.6ms - 0.5ms).  And the first trigger will happen 0.5ms into the buffer
 tdd.secondary = False
 tdd.en = True
@@ -160,21 +159,20 @@ print("buffer_time:", buffer_time, " ms")
 fs = int(my_sdr.sample_rate)
 print("sample_rate:", fs)
 N = buffer_size
-fc = int(signal_freq / (fs / N)) * (fs / N)
+fc = int(0.5e6 / (fs / N)) * (fs / N)
 ts = 1 / float(fs)
 t = np.arange(0, N * ts, ts)
 i = np.cos(2 * np.pi * t * fc) * 2 ** 14
 q = np.sin(2 * np.pi * t * fc) * 2 ** 14
 iq = 0.9* (i + 1j * q)
 
+# Send data
+my_sdr.tx([iq*0.5, iq])  # only send data to the 2nd channel (that's all we need)
 
 my_sdr._ctx.set_timeout(30000)
 my_sdr._rx_init_channels() 
-
-# %%    
-# Send data
-my_sdr.tx([iq, iq])  # only send data to the 2nd channel (that's all we need)
-
+    
+# time.sleep(3)    
 print('Collecting...')
 
 # Collect data
@@ -191,8 +189,9 @@ for r in range(5):    # grab several buffers to let the AGC settle
     
 my_sdr.tx_destroy_buffer()
 
-PRI = tdd.frame_length_ms / 1e3
-PRF = 1 / PRI
+# %%
+
+frame_length = tdd.frame_length_ms / 1e3
 
 # Don't take first burst because it is contaminated with noise
 num_bursts = tdd.burst_count - 1
@@ -200,7 +199,8 @@ num_bursts = tdd.burst_count - 1
 N = chan1.size
 time = np.linspace(0, ts * N, N)
 
-# Plot full time domain signal
+
+# Plot time domain signal
 fig1, ax1 = plt.subplots(figsize=(16, 8))
 ax1.plot(time * 1e3, np.abs(chan1))
 ax1.set_title('Received Signal', fontsize=20)
@@ -208,19 +208,18 @@ ax1.set_xlabel('Time [ms]', fontsize=18)
 
 # %%
 # Split into frames
-N_frame = int(PRI / ts)
+N_frame = int(frame_length / ts)
 rx_bursts = np.zeros((num_bursts, N_frame), dtype=complex)
-
-# First ramp starts at 0.5ms
 start_offset_time = 0.5e-3
 start_offset_index = int((start_offset_time / (frame_time / 1e3)) * N_frame)
-
-# fig, ax = plt.subplots(figsize=(16, 8))
+fig, ax = plt.subplots(figsize=(16, 8))
 for burst in range(num_bursts):
     rx_bursts[burst] = chan1[start_offset_index + (burst + 1) * N_frame:
         start_offset_index + (burst + 2) * N_frame]
-    # ax.plot(abs(rx_bursts[burst]))
+    # if (burst > 0):
+    ax.plot(abs(rx_bursts[burst]))
 
+fig, ax = plt.subplots(figsize=(16, 8))
 freq = np.linspace(-fs / 2, fs / 2, N_frame)
 
 # Obtain range-FFT x-axis
@@ -228,100 +227,168 @@ c = 3e8
 wavelength = c / output_freq
 ramp_time_s = ramp_time / 1e6
 slope = (BW * 4) / ramp_time_s
-dist = (freq - signal_freq) * c / (2 * slope)
-
-
-# Resolutions
-R_res = c / (2 * (BW * 4))
-v_res = wavelength / (2 * num_bursts * PRI)
-
-# Doppler spectrum
-PRF = 1 / PRI
-max_doppler_freq = PRF / 2
-max_doppler_vel = max_doppler_freq * wavelength / 2
-
-# %%
-rx_bursts_fft = fftshift(abs(fft2(rx_bursts)))
-thresholds = np.zeros(rx_bursts_fft.shape)
-rx_bursts_fft_cfar = np.ma.masked_all(rx_bursts_fft.shape)
-
-# %%
-
-# Uncomment to perform CFAR thresholding before plotting
-# This significantly increases run time
-"""
-# CFAR for entire range Doppler spectrum
-fig, ax = plt.subplots(figsize=(16, 8))
-for m in range(num_bursts):
-    threshold, targets, noise = target_detection.cfar(rx_bursts_fft[m], 
-        num_guard_cells=5, num_ref_cells=10, cfar_method='false_alarm', 
-        fa_rate=0.05)
-    thresholds[m] = threshold
-    if (m % 4 == 0):
-        ax.plot(dist, log10(targets), label=m)
-    rx_bursts_fft_cfar[m] = targets
-
-ax.plot(dist, log10(rx_bursts_fft_cfar[4]), label='target')
-ax.plot(dist, log10(thresholds[4]), label='threshold')
-ax.legend(loc='upper right', fontsize=16)
+dist = freq * c / (2 * slope)
 
 # Plot frames overlayed frequency spectrum
 # for burst_index in range(1, num_bursts):
-#     if (burst_index % 4 == 0):
-#         ax.plot(dist, log10(fftshift(abs(rx_bursts_fft[burst_index]))), label=burst_index)
+burst_index = 3
+burst_fft_tmp = fft(rx_bursts[burst_index])
 
-ax.set_title('Overlaid Frequency Spectrum\nSpacing: %0.2fms' % (PRI * 1e3), fontsize=24)
-ax.set_xlabel('Range [m]', fontsize=22)
+    # ax1.plot(dist, log10(fftshift(burst_fft_1)), label='First')
+ax.plot(dist, log10(fftshift(abs(burst_fft_tmp))), label=(burst_index + 1))
+
+ax.set_title('Overlaid Frequency Spectrum\nSpacing: %0.2fms' % (frame_length * 1e3), fontsize=24)
+ax.set_xlabel('Range [m]]', fontsize=22)
 # ax.set_xlabel('Frequency [Hz]', fontsize=22)
 ax.set_ylabel('Magnitude [dB]', fontsize=22)
-# ax.set_xlim([70e3, 130e3])
-ax.set_xlim([0, 10])
-ax.legend(loc='upper right', fontsize=16)
+# ax.legend(loc='upper right', fontsize=16)
+# ax.set_xlim([0, 100e3])
+ax.set_xlim([0, 20])
 
-# rx_bursts_fft[np.where(log10(rx_bursts) < 3)] = 0
+# %%
+# Create template signal
+max_range = 20 # one-way
+max_freq = 2 * max_range * slope / c # corresponds to round-trip
+
+ts_frame = frame_length / N_frame
+frame_time = np.linspace(0, frame_length, N_frame)
+chirp = signal.chirp(frame_time, f0=25e3, t1=frame_length, 
+    f1=30e3, method='linear')
+
+fig, ax = plt.subplots(figsize=(16, 8))
+ax.set_title('Chirp Signal', fontsize=24)
+ax.set_xlabel('Time [ms]]', fontsize=22)
+ax.set_ylabel('Amplitude', fontsize=22)
+ax.set_xlim([3, 3.01])
+
+ax.plot(frame_time * 1e3, chirp)
+
+fig, ax = plt.subplots(figsize=(16, 8))
+ax.specgram(chirp, Fs=1 / ts_frame)
+ax.set_title('Chirp Spectogram\n$f_s=%0.2f$MHz' % (1 / ts_frame / 1e6), fontsize=24)
+ax.set_xlabel('Time [ms]', fontsize=22)
+ax.set_ylabel('Frequency [Hz]', fontsize=22)
+
+# %%
+# Create matched filter, mf_n
+chirp_fft = fft(chirp)
+mf_n = ifft(chirp_fft.conj())
+
+# %%
+
+fig, ax = plt.subplots(figsize=(16, 8))
+ax.set_title('Matched Filtered Frequency Spectrum', fontsize=24)
+# ax.set_xlabel('Range [m]]', fontsize=22)
+ax.set_xlabel('Frequency [Hz]', fontsize=22)
+ax.set_ylabel('Magnitude [dB]', fontsize=22)
+# ax.set_xlim([0, max_freq])
+
+rx_burst = rx_bursts[3]
+rx_burst_fft = fft(rx_burst)
+Y_k = fftshift(abs(rx_burst_fft))
+# y_n = np.convolve(mf_n, rx_burst, mode='same')
+# Y_k = fftshift(abs(fft(y_n)))
+
+ax.plot(dist, log10(Y_k), label='Filtered')
+# ax.plot(freq, log10(fftshift(abs(rx_burst_fft))), 
+    # label='Unfiltered')
+ax.legend(loc='upper right', fontsize=16)
+# ax.axvline(x=max_range, linestyle='--', c='r')
+ax.set_xlim([0, 10])
+
+xlims = ax.get_xlim()
+ylims = ax.get_ylim()
+
+# %%
+# Plot SNR
+fa_rate = 0.05
+threshold, targets, noise_variance = target_detection.cfar(Y_k, 10, 30, bias=3,
+    cfar_method='false_alarm', fa_rate=fa_rate)
+
+snr = targets**2 / noise_variance
+
+fig, ax = plt.subplots(figsize=(16, 8))
+ax.set_title('SNR - Targets Only\n$P_{FA}=%0.2f$' % fa_rate, fontsize=24)
+ax.set_xlabel('Range [m]', fontsize=22)
+ax.set_ylabel('SNR [dB]', fontsize=22)
+ax.set_xlim([0, 30])
+
+ax.stem(dist, log10(abs(snr)))
+ax.plot(dist, log10(abs(threshold)))
+
+# %%
+# Create template signal at 
+# Notation used by Charvat
+M = num_bursts
+Nz = N_frame
+PRI = frame_length
+
+# Indices of fast and slow time, respectively
+l = np.arange(Nz)
+# m = np.arange(M)
+
+# Expected range and velocity
+N_image = 100
+r_exp = 8 # m
+r_exp = np.linspace(-20, 20, N_image)
+v_exp = 4 # m/s
+v_exp = np.linspace(-10, 10, N_image)
+
+# Range and velocity resolution
+R_res = c / (2 * (BW * 4))
+v_res = wavelength / (2 * M * PRI)
+
+A = np.zeros((N_image, N_image), dtype=complex)
+
+from numpy import pi
+for r_index, r in enumerate(r_exp):
+    for v_index, v in enumerate(v_exp):
+        sum = 0
+        for m in range(M):
+            template = np.exp(-2j * pi * ((r * l / Nz) + (v * m / M)))
+            sum += np.sum(rx_bursts[m] * template)
+        A[r_index][v_index] = sum / (Nz * M)
+
+A = abs(A)**2
+
+# %%
+
+fig, ax = plt.subplots(figsize=(16, 16))
+extent = [v_exp.min(), v_exp.max(), r_exp.min(), r_exp.max()]
+range_doppler = ax.imshow(fftshift(abs(fft2(rx_bursts))), aspect='auto')
+ax.set_title('Range Doppler Spectrum', fontsize=24)
+ax.set_xlabel('Velocity [m/s]', fontsize=22)
+ax.set_ylabel('Range [m]', fontsize=22)
+fig.colorbar(range_doppler, orientation='vertical')
+fig.savefig('Figures/testamb.png')
+plt.show()
+
+# %%
+
+"""
+# Ambiguity function
+a_n = np.zeros(rx_bursts.shape, dtype=complex)
+A_k = np.zeros(rx_bursts.shape, dtype=complex)
+
+# Template as a function of l, m, and n
+for m in range(M):
+    template = np.exp(-2j * pi * ((r_exp * l / Nz) + (v_exp * m / M)))
+    # template = 1
+    a_n[m] = rx_bursts[m] * template / (Nz * M)
+    A_k[m] = fftshift(fft(a_n[m]))
+"""
 """
 
 # %%
 fig, ax = plt.subplots(figsize=(16, 16))
-
-extent = [-max_doppler_vel, max_doppler_vel, dist.min(), dist.max()]
-range_doppler = ax.imshow(log10(rx_bursts_fft).T, aspect='auto', 
-    extent=extent, origin='lower', cmap=get_cmap('bwr'), vmin=2, vmax=7)
-
-ax.set_title('Range Doppler Spectrum', fontsize=24)
-ax.set_xlabel('Velocity [m/s]', fontsize=22)
-ax.set_ylabel('Range [m]', fontsize=22)
-
-max_range = 10
-ax.set_ylim([0, max_range])
-ax.set_yticks(np.arange(0, max_range, 2))
-plt.xticks(fontsize=16)
-plt.yticks(fontsize=16)
-# colorbar = fig.colorbar(range_doppler, cmap=get_cmap('bwr'), 
-#     orientation='vertical')
-# colorbar.set_label(label='Magnitude [dB]', size=22)
-
-# fig.savefig('Figures/Range_Doppler_Moving_Backward_Refl_0-%i_bwr_hires.png' % (max_range)) #, facecolor='w')
-# fig.savefig('Figures/Range_Doppler_Moving_Forward_Refl_0-%i_bwr_hires.png' % (max_range)) #, facecolor='w')
-# fig.savefig('Figures/Range_Doppler_Stationary_Refl_0-%i_bwr_hires.png' % (max_range)) #, facecolor='w')
-
-# %%
-# Get colorbar separately
-# colorbar = fig.colorbar(range_doppler, cmap=get_cmap('bwr'), 
-#     orientation='horizontal')
-# colorbar.set_label(label='Magnitude [dB]', size=22)
-# ax.remove()
-# fig.savefig('Figures/Range_Doppler_Colorbar_bwr.png', bbox_inches='tight') #, facecolor='w')
-
-# %%
-# 3D Plot
-# print('Plotting 3D')
-# X = np.linspace(dist.min(), dist.max(), rx_bursts_fft.shape[1])
-# Y = np.arange(-max_doppler_vel, max_doppler_vel, rx_bursts_fft.shape[0])
-# X, Y = np.meshgrid(X, Y)
-
-# fig = plt.figure()
-# ax = plt.axes(projection='3d')
-# ax.plot(X, Y, log10(rx_bursts_fft), cmap=get_cmap('bwr'), vmin=2, vmax=7)
-# # ax.set_xlim([0, 15])
+total_max_range = freq.max() * c / (2 * slope)
+total_max_vel = v_res * M
+extent = [-total_max_vel / 2, total_max_vel / 2, -total_max_range / 2, total_max_range / 2]
+# ax.imshow(log10(abs(fftshift(fft2(a_n, axes=(1,)), axes=(1,)))**2).T, extent=extent, aspect='auto')
+ax.imshow(log10(abs(A_k)**2).T, extent=extent, aspect='auto')
+ax.set_ylim([-20, 20])
+# fig.colorbar(cm=get_cmap(''))
+fig.savefig('Figures/testamb.png')
 plt.show()
+# ax.plot(freq, log10(fftshift(abs(a_n[39])**2)))
+"""
