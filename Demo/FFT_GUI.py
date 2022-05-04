@@ -24,9 +24,9 @@ from target_detection import cfar
 
 # Instantiate all the Devices
 try:
-	# import phaser_config
-	rpi_ip = "ip:192.168.1.140"
-	sdr_ip = "ip:192.168.2.1" # "192.168.2.1, or pluto.local"  # IP address of the Transreceiver Block
+	import phaser_config
+	rpi_ip = phaser_config.rpi_ip
+	sdr_ip = phaser_config.sdr_ip # "192.168.2.1, or pluto.local"  # IP address of the Transreceiver Block
 except:
 	print('No config file found...')
 	rpi_ip = "ip:phaser.local"	# IP address of the Raspberry Pi
