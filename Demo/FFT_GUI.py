@@ -1,26 +1,31 @@
 #!/usr/bin/env python3
 
 # Imports
+import sys
+sys.path.insert(0, '../Phaser_Board')
+sys.path.insert(0, '..')
+sys.path.insert(0, '/home/marchall/documents/chill/.packages/pyadi-iio')
+sys.path.insert(0, '/home/marchall/documents/chill/.packages/libiio')
+
 from pyqtgraph.Qt import QtGui, QtCore
 from PyQt5.QtCore import Qt
 from PyQt5.QtWidgets import *
 import pyqtgraph as pg
 import numpy as np
 from numpy import arange, sin, cos, pi, log10
-from numpy.fft import fft, fftshift
-import sys
+from numpy.fft import fft, fftshift, fft2, ifft2, ifftshift
 from scipy import signal
 import time
-
-sys.path.insert(0, '../Phaser_Board')
+from matplotlib import cm
 
 import adi
 from Phaser_Functions import range_norm as range_norm_func
+from target_detection import cfar
 
 # Instantiate all the Devices
 try:
-	import phaser_config
-	rpi_ip = phaser_config.rpi_ip
+	# import phaser_config
+	rpi_ip = "ip:192.168.1.140"
 	sdr_ip = "ip:192.168.2.1" # "192.168.2.1, or pluto.local"  # IP address of the Transreceiver Block
 except:
 	print('No config file found...')
@@ -36,120 +41,154 @@ except NameError:
 
 time.sleep(0.5)
 
-try:
-	x = my_phaser.uri
-	print("cn0566 already connected")
-except NameError:
-	print("cn0566 not open...")
-	my_phaser = adi.CN0566(uri=rpi_ip, rx_dev=my_sdr)
+gpios = adi.one_bit_adc_dac(rpi_ip)
+gpios.gpio_vctrl_1 = 1 # 1=Use onboard PLL/LO source  (0=disable PLL and VCO, and set switch to use external LO input)
+gpios.gpio_vctrl_2 = 0 # 1=Send LO to transmit circuitry  (0=disable Tx path, and send LO to LO_OUT)
+gpios.gpio_burst =0    # High to low causes Pluto to start a new Rx buffer and a burst of TDD pulses
+time.sleep(0.5)
 
-# Initialize both ADAR1000s, set gains to max, and all phases to 0
-my_phaser.configure(device_mode="rx")
-for i in range(0, 8):
-	my_phaser.set_chan_gain(i, 127)
-	my_phaser.set_chan_phase(i, 0)
+my_phaser = adi.CN0566(uri=rpi_ip, rx_dev=my_sdr)
+time.sleep(0.5)
 
-
-fs = 0.6e6
+# Parameters
+sample_rate = 0.6e6
+# sample_rate = 10e6
 center_freq = 2.1e9
-signal_freq = 100e3
+signal_freq = 0.1e6
 num_slices = 200
 fft_size = 1024*16
-# fft_size = 2**10
 
 # Create radio
 '''This script is for Pluto Rev C, dual channel setup'''
-my_sdr.fs = int(fs)
+my_sdr.sample_rate = int(sample_rate)
 
 # Configure Rx
 my_sdr.rx_lo = int(center_freq)   # set this to output_freq - (the freq of the HB100)
 my_sdr.rx_enabled_channels = [0, 1]   # enable Rx1 (voltage0) and Rx2 (voltage1)
-my_sdr.rx_buffer_size = int(fft_size)
 my_sdr.gain_control_mode_chan0 = 'manual'  # manual or slow_attack
 my_sdr.gain_control_mode_chan1 = 'manual'  # manual or slow_attack
-my_sdr.rx_hardwaregain_chan0 = int(30)	 # must be between -3 and 70
-my_sdr.rx_hardwaregain_chan1 = int(30)	 # must be between -3 and 70
+my_sdr.rx_hardwaregain_chan0 = int(60)   # must be between -3 and 70
+my_sdr.rx_hardwaregain_chan1 = int(60)   # must be between -3 and 70
 # Configure Tx
 my_sdr.tx_lo = int(center_freq)
 my_sdr.tx_enabled_channels = [0, 1]
-my_sdr.tx_cyclic_buffer = True		# must set cyclic buffer to true for the tdd burst mode.  Otherwise Tx will turn on and off randomly
-my_sdr.tx_hardwaregain_chan0 = -88	 # must be between 0 and -88
-my_sdr.tx_hardwaregain_chan1 = -0	# must be between 0 and -88
+my_sdr.tx_cyclic_buffer = True      # must set cyclic buffer to true for the tdd burst mode.  Otherwise Tx will turn on and off randomly
+my_sdr.tx_hardwaregain_chan0 = -88   # must be between 0 and -88
+my_sdr.tx_hardwaregain_chan1 = -3   # must be between 0 and -88
 
-# Enable TDD logic in pluto (this is for synchronizing Rx Buffer to ADF4159 TX input)
-#gpio = adi.one_bit_adc_dac(sdr_ip)
-#gpio.gpio_phaser_enable = True
+# Read properties
+print("RX LO %s" % (my_sdr.rx_lo))
+
+# Enable phaser logic in pluto
+gpio = adi.one_bit_adc_dac(sdr_ip)
+time.sleep(0.5)
+gpio.gpio_phaser_enable = True
+time.sleep(0.5)
+gpio.gpio_tdd_ext_sync = True   # If set to True, this enables external capture triggering using the L24N GPIO on the Pluto.  When set to false, an internal trigger pulse will be generated every second
 
 # Configure the ADF4159 Rampling PLL
 output_freq = 12.1e9
-BW = 500e6
+BW = 500e6/4
 num_steps = 1000
 ramp_time = 1e3 # us
 ramp_time_s = ramp_time / 1e6
 my_phaser.frequency = int(output_freq/4) # Output frequency divided by 4
-my_phaser.freq_dev_range = int(BW/4) # frequency deviation range in Hz.  This is the total freq deviation of the complete freq ramp
+my_phaser.freq_dev_range = int(BW) # frequency deviation range in Hz.  This is the total freq deviation of the complete freq ramp
 my_phaser.freq_dev_step = int(BW/num_steps) # frequency deviation step in Hz.  This is fDEV, in Hz.  Can be positive or negative
 my_phaser.freq_dev_time = int(ramp_time) # total time (in us) of the complete frequency ramp
-my_phaser.delay_word = 4095		# 12 bit delay word.  4095*PFD = 40.95 us.	For sawtooth ramps, this is also the length of the Ramp_complete signal
-my_phaser.delay_clk = 'PFD'		# can be 'PFD' or 'PFD*CLK1'
-my_phaser.delay_start_en = 0		 # delay start
-my_phaser.ramp_delay_en = 0			 # delay between ramps.  
-my_phaser.trig_delay_en = 0			 # triangle delay
-my_phaser.ramp_mode = "continuous_triangular"	  # ramp_mode can be:  "disabled", "continuous_sawtooth", "continuous_triangular", "single_sawtooth_burst", "single_ramp_burst"
-my_phaser.sing_ful_tri = 0			 # full triangle enable/disable -- this is used with the single_ramp_burst mode 
-my_phaser.tx_trig_en = 0			 # start a ramp with TXdata
-# Enable ADF4159 TX input and generate a single triangular ramp with each trigger
-# my_phaser.ramp_mode = "single_ramp_burst"		# ramp_mode can be:  "disabled", "continuous_sawtooth", "continuous_triangular", "single_sawtooth_burst", "single_ramp_burst"
-# my_phaser.sing_ful_tri = 1		   # full triangle enable/disable -- this is used with the single_ramp_burst mode 
-# my_phaser.tx_trig_en = 1			   # start a ramp with TXdata
-my_phaser.enable = 0				 # 0 = PLL enable.	Write this last to update all the registers
+my_phaser.ramp_mode = "single_sawtooth_burst"     # ramp_mode can be:  "disabled", "continuous_sawtooth", "continuous_triangular", "single_sawtooth_burst", "single_ramp_burst"
+my_phaser.delay_word = 4095     # 12 bit delay word.  4095*PFD = 40.95 us.  For sawtooth ramps, this is also the length of the Ramp_complete signal
+my_phaser.delay_clk = 'PFD'     # can be 'PFD' or 'PFD*CLK1'
+my_phaser.delay_start_en = 0         # delay start
+my_phaser.ramp_delay_en = 0          # delay between ramps.
+my_phaser.trig_delay_en = 0          # triangle delay
+my_phaser.sing_ful_tri = 0           # full triangle enable/disable -- this is used with the single_ramp_burst mode
+my_phaser.tx_trig_en = 1             # start a ramp with TXdata
+#my_phaser.clk1_value = 100
+#my_phaser.phase_value = 3
+my_phaser.enable = 0                 # 0 = PLL enable.  Write this last to update all the registers
 
-"""
-	Print config
-"""
-print("""
-CONFIG:
-Sample rate: {fs}MHz
-Num samples: 2^{Nlog2}
-Bandwidth: {BW}MHz
-Ramp time: {ramp_time}ms
-Output frequency: {output_freq}MHz
-""".format(fs=fs / 1e6, Nlog2=int(np.log2(fft_size)), 
-	BW=BW / 1e6, ramp_time=ramp_time / 1e3, output_freq=output_freq / 1e6))
+# %%
+# Configure TDD controller
+tdd = adi.tdd(sdr_ip)
+tdd.frame_length_ms = 4    # each GPIO toggle is spaced 4ms apart
+tdd.burst_count = 40 # there is a burst of 20 toggles, then off for a long time
+tdd.rx_rf_ms = [0.5,0.9, 0, 0]    # each GPIO pulse will be 100us (0.6ms - 0.5ms).  And the first trigger will happen 0.5ms into the buffer
+tdd.secondary = False
+tdd.en = True
+
+# buffer size needs to be greater than the frame_time
+frame_time = tdd.frame_length_ms*tdd.burst_count   # time in ms
+print("frame_time:  ", frame_time, "ms")
+buffer_time = 0
+power=12
+while frame_time > buffer_time:
+    power=power+1
+    buffer_size = int(2**power)
+    buffer_time = buffer_size/my_sdr.sample_rate*1000   # buffer time in ms
+    if power==23:
+        break     # max pluto buffer size is 2**23, but for tdd burst mode, set to 2**22
+print("buffer_size:", buffer_size)
+my_sdr.rx_buffer_size = buffer_size
+print("buffer_time:", buffer_time, " ms")
 
 # Create a sinewave waveform
-fs = int(my_sdr.fs)
-print("fs:", fs)
-N = int(my_sdr.rx_buffer_size)
+fs = int(my_sdr.sample_rate)
+print("sample_rate:", fs)
+N = buffer_size
 fc = int(signal_freq / (fs / N)) * (fs / N)
 ts = 1 / float(fs)
 t = np.arange(0, N * ts, ts)
 i = np.cos(2 * np.pi * t * fc) * 2 ** 14
 q = np.sin(2 * np.pi * t * fc) * 2 ** 14
-iq = 1 * (i + 1j * q)
+iq = 0.9* (i + 1j * q)
 
-# Send data
-my_sdr._ctx.set_timeout(0)
-my_sdr.tx([iq*0.5, iq])  # only send data to the 2nd channel (that's all we need)
+
+# Don't take first burst because it is contaminated with noise
+num_bursts = tdd.burst_count - 1
+
+PRI = tdd.frame_length_ms / 1e3
+PRF = 1 / PRI
+max_doppler_freq = PRF / 2
+c = 3e8
+wavelength = c / output_freq
+max_doppler_vel = max_doppler_freq * wavelength / 2
+velocity_axis = np.linspace(-max_doppler_vel, max_doppler_vel, num_bursts)
+
+N_frame = int(PRI / ts)
+rx_bursts = np.zeros((num_bursts, N_frame), dtype=complex)
+
+start_offset_time = 0.5e-3
+start_offset_index = int((start_offset_time / (frame_time / 1e3)) * N_frame)
+
+
+my_sdr._ctx.set_timeout(30000)
+my_sdr._rx_init_channels()
+
+
 
 # Constants
 c = 3e8
 default_rf_bw = 250e6
 
+# Remove later
 # For testing only
 # Create signal with some normal noise
 N = 1000
 # fft_size = 1024
 t = np.linspace(0, 1, N)
 # fs = 1e6
-freq = np.linspace(-fs / 2, fs / 2, int(fft_size))
-slope = BW * 4 / ramp_time
+freq = np.linspace(-fs / 2, fs / 2, int(N_frame))
+slope = BW / 4 / ramp_time_s
 max_dist = (fs / 2 - signal_freq) * c / slope
-dist = np.linspace(-max_dist, max_dist, fft_size)
+# dist = np.linspace(-max_dist, max_dist, N_frame)
+dist = (freq - signal_freq) * c / (2 * slope)
 
 xdata = freq
 plot_dist = False
 range_norm = False
+cfar_toggle = False
+clutter_toggle = False
 
 f = 200
 omega = 2 * pi * f
@@ -162,6 +201,7 @@ class Window(QMainWindow):
 		self.setWindowTitle("Interactive FFT")
 		self.setGeometry(100, 100, 600, 500)
 		self.UiComponents()
+
 
 		# showing all the widgets
 		self.show()
@@ -212,7 +252,7 @@ class Window(QMainWindow):
 		self.range_res_label.setFont(font)
 		self.range_res_label.setAlignment(Qt.AlignRight)
 		self.range_res_label.setMinimumWidth(300)
-		layout.addWidget(self.range_res_label, 3, 1)
+		layout.addWidget(self.range_res_label, 5, 1)
 
 		# RF bandwidth slider
 		self.bw_slider = QSlider(Qt.Horizontal)
@@ -222,11 +262,27 @@ class Window(QMainWindow):
 		self.bw_slider.setTickInterval(30)
 		self.bw_slider.setTickPosition(QSlider.TicksBelow)
 		self.bw_slider.valueChanged.connect(self.get_range_res)
-		layout.addWidget(self.bw_slider, 3, 0)
+		layout.addWidget(self.bw_slider, 5, 0)
 
 		self.set_bw = QPushButton('Set RF Bandwidth')
 		self.set_bw.pressed.connect(self.set_range_res)
-		layout.addWidget(self.set_bw, 4, 0, 1, 2)
+		layout.addWidget(self.set_bw, 6, 0, 1, 2)
+
+		# CFAR toggle
+		self.cfar_checkbox = QCheckBox('Toggle CFAR')
+		font = self.cfar_checkbox.font()
+		font.setPointSize(15)
+		self.cfar_checkbox.setFont(font)
+		self.cfar_checkbox.stateChanged.connect(self.toggle_cfar)
+		layout.addWidget(self.cfar_checkbox, 3, 0, 1, 2)
+
+		# Clutter suppression toggle
+		self.clutter_checkbox = QCheckBox('Toggle Clutter Suppression')
+		font = self.clutter_checkbox.font()
+		font.setPointSize(15)
+		self.clutter_checkbox.setFont(font)
+		self.clutter_checkbox.stateChanged.connect(self.toggle_clutter)
+		layout.addWidget(self.clutter_checkbox, 4, 0, 1, 2)
 
 		# FFT plot
 		self.plot = pg.plot()
@@ -240,6 +296,28 @@ class Window(QMainWindow):
 		layout.addWidget(self.plot, 0, 2, 10, 1)
 		self.plot.setYRange(0, 10)
 		self.plot.setXRange(signal_freq, fs / 2)
+
+		# Range-Doppler plot
+		# self.range_doppler_view = pg.ImageView()
+		# # self.range_doppler = pg.image()
+		# # self.range_doppler_view.setImage(self.range_doppler)
+		# colormap = cm.get_cmap('bwr')  # cm.get_cmap("CMRmap")
+		# colormap._init()
+		# lut = (colormap._lut * 255).view(np.ndarray)
+		# colors = [
+		# 	(0, 0, 0),
+		# 	(4, 5, 61),
+		# 	(84, 42, 55),
+		# 	(15, 87, 60),
+		# 	(208, 17, 141),
+		# 	(255, 255, 255)
+		# 	]
+
+		# # color map
+		# cmap = pg.ColorMap(pos=np.linspace(0.0, 1.0, 6), color=lut)
+		# # self.range_doppler_view.setColorMap(cmap)
+		# self.range_doppler_view.setFixedSize(300, 300)
+		# layout.addWidget(self.range_doppler_view, 6, 0, 4, 2)
 
 		widget.setLayout(layout)
 
@@ -286,7 +364,6 @@ class Window(QMainWindow):
 			range_norm = False
 
 	def change_x_axis(self, state):
-		global plot_dist
 		""" Toggles between showing frequency and range for the x-axis
 
 		Args:
@@ -295,12 +372,50 @@ class Window(QMainWindow):
 		Returns:
 		None
 		"""
+		global plot_dist
+		plot_state = win.plot.getViewBox().state
+		target_range = plot_state['targetRange']
+		range_x = np.array(target_range[0])
+		range_y = np.array(target_range[1])
 		if (state == QtCore.Qt.Checked):
 			print('Range axis')
 			plot_dist = True
+			print(range_x[0] / signal_freq)
+			range_x = (range_x - signal_freq) * c / (2 * slope)
+			self.plot.setXRange(*range_x)
 		else:
 			print('Frequency axis')
-			plot_dist = False 
+			plot_dist = False
+			range_x = (range_x * (2 * slope) / c) + signal_freq
+			self.plot.setXRange(*range_x)
+
+	def toggle_cfar(self, state):
+		""" Toggles CFAR thresholding
+
+		Returns:
+		None
+		"""
+		global cfar_toggle
+		if (state == QtCore.Qt.Checked):
+			print('CFAR on')
+			cfar_toggle = True
+		else:
+			print('CFAR off')
+			cfar_toggle = False
+
+	def toggle_clutter(self, state):
+		""" Toggles CFAR thresholding
+
+		Returns:
+		None
+		"""
+		global clutter_toggle
+		if (state == QtCore.Qt.Checked):
+			print('Clutter suppression on')
+			clutter_toggle = True
+		else:
+			print('CFAR off')
+			clutter_toggle = False
 
 # create pyqt5 app
 App = QApplication(sys.argv)
@@ -317,35 +432,82 @@ def update():
 	"""
 	global index, xdata, plot_dist, range_norm
 	label_style = {'color': '#FFF', 'font-size': '14pt'}
-	x_n = np.sin(omega * t) + noise[index % 10]
-	X_k = fft(x_n, n=fft_size)
+	# x_n = np.sin(omega * t) + noise[index % 10]
+	# X_k = fft(x_n, n=fft_size)
 
-	x_n = my_sdr.rx()
-	x_n = x_n[0] + x_n[1]
+	my_sdr.tx([iq, iq])
 
-	X_k = fft(x_n, n=fft_size)
+	# Quick burst
+	gpios.gpio_burst = 0
+	gpios.gpio_burst = 1
+	gpios.gpio_burst = 0
+
+	data = my_sdr.rx()
+	chan1 = data[0]
+	chan2 = data[1]
+
+	my_sdr.tx_destroy_buffer()
+
+	# Split into frames starting at offset
+	for burst in range(num_bursts):
+		rx_bursts[burst] = chan1[start_offset_index + (burst + 1) * N_frame:
+		start_offset_index + (burst + 2) * N_frame]
+
+	burst_0 = rx_bursts[0]
+	X_k = fft(burst_0)
+	rx_bursts_fft = fft2(rx_bursts)
+
+	# x_n = my_sdr.rx()
+	# x_n = x_n[0] + x_n[1]
+
+	# X_k = fft(x_n, n=fft_size)
+
+	"""
+		A bunch of options defined in the UI components
+	"""
+	bias = 3
+	num_guard_cells = 10
+	num_ref_cells = 30
+	cfar_method = 'greatest'
+	if (cfar_toggle):
+		threshold, targets = cfar(abs(X_k), num_guard_cells, num_ref_cells, bias, cfar_method)
+		X_k = targets
 
 	if (range_norm):
 		X_k = range_norm_func(X_k, dist, 1)
-		win.plot.enableAutoRange('xy', True)
+		# win.plot.enableAutoRange('xy', True)
+
+	if (clutter_toggle):
+		max_clutter_vel = 0.1
+		rx_bursts_cf_fft = fftshift(rx_bursts_fft.copy())
+		# rx_bursts_cf_fft[np.where((velocity_axis > -max_clutter_vel) &
+		# 			  (velocity_axis < max_clutter_vel))] = 0
+		rx_bursts_fft[np.where((velocity_axis > -0.4) & (velocity_axis < -0.3))] = 0
+		rx_bursts_cf = ifft2(ifftshift(rx_bursts_cf_fft))
+		X_k = rx_bursts_cf[0]
 
 	if (plot_dist):
-			print('dist')
-			win.curve.setData(dist, fftshift(log10(abs(X_k))))
-			win.plot.setXRange(0, max_dist)
-			win.plot.setLabel('bottom', text='Distance', units='m', **label_style)
+		# print('dist')
+		# print(win.plot.getViewBox().state)
+		win.curve.setData(dist, fftshift(log10(abs(X_k))))
+		# win.plot.setXRange(0, max_dist)
+		win.plot.setLabel('bottom', text='Distance', units='m', **label_style)
 	else:
-			win.curve.setData(freq, fftshift(log10(abs(X_k))))
-			win.plot.setXRange(signal_freq, fs / 2)
-			win.plot.setLabel('bottom', text='Frequency', units='Hz', **label_style)
+		win.curve.setData(freq, fftshift(log10(abs(X_k))))
+		# win.plot.setXRange(signal_freq, fs / 2)
+		# win.plot.setXRange(-fs / 2, fs / 2)
+		win.plot.setLabel('bottom', text='Frequency', units='Hz', **label_style)
 
-	# if index == 1:
-	# win.plot.enableAutoRange('xy', False)
+	# win.range_doppler_view.setImage(log10(fftshift(abs(rx_bursts_FFT))).T)
+	# win.range_doppler.enableAutoRange('xy', False)
+
+	if index == 1:
+		win.plot.enableAutoRange('xy', False)
 	index += 1
 
 timer = QtCore.QTimer()
 timer.timeout.connect(update)
-timer.start(100)
+timer.start(0)
 
 # start the app
 sys.exit(App.exec())
