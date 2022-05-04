@@ -34,6 +34,10 @@
 
 '''To test this script, shine a 10.5GHz HB100 source on the array'''
 
+import sys
+sys.path.insert(0, '..')
+sys.path.insert(0, '/home/marchall/documents/chill/.packages/pyadi-iio')
+
 from operator import index
 import matplotlib.pyplot as plt
 from matplotlib.cm import get_cmap
@@ -56,9 +60,9 @@ from time import sleep
 
 # Instantiate all the Devices
 try:
-    import phaser_config
-    rpi_ip = phaser_config.rpi_ip
-    sdr_ip = "ip:192.168.2.1" # "192.168.2.1, or pluto.local"  # IP address of the Transreceiver Block
+	import phaser_config
+	rpi_ip = phaser_config.rpi_ip
+	sdr_ip = phaser_config.sdr_ip # "192.168.2.1, or pluto.local"  # IP address of the Transreceiver Block
 except:
     print('No config file found...')
     rpi_ip = "ip:phaser.local"  # IP address of the Raspberry Pi
@@ -248,26 +252,11 @@ rx_bursts_fft = fft2(rx_bursts)
 range_doppler_fig, ax = plt.subplots(figsize=(16, 16))
 
 extent = [-max_doppler_vel, max_doppler_vel, dist.min(), dist.max()]
-range_doppler = ax.imshow(log10(fftshift(abs(rx_bursts_fft))).T, aspect='auto', 
-    extent=extent, origin='lower', cmap=get_cmap('bwr'), vmin=2, vmax=7)
 
-ax.set_title('Range Doppler Spectrum', fontsize=24)
-ax.set_xlabel('Velocity [m/s]', fontsize=22)
-ax.set_ylabel('Range [m]', fontsize=22)
-
-max_range = 10
-ax.set_ylim([0, max_range])
-ax.set_yticks(np.arange(0, max_range, 2))
-plt.xticks(fontsize=16)
-plt.yticks(fontsize=16)
-colorbar = range_doppler_fig.colorbar(range_doppler, cmap=get_cmap('bwr'), 
-    orientation='vertical')
-colorbar.set_label(label='Magnitude [dB]', size=22)
-
-"""
-    Now keep updating the range-Doppler spectrum
-"""
+i = 0
+cmn = ''
 def gen_spectrum(frame):
+    global i, range_doppler, cmn
     my_sdr.tx([iq, iq])  # only send data to the 2nd channel (that's all we need)
 
     print("Collecting")
@@ -277,12 +266,12 @@ def gen_spectrum(frame):
     gpios.gpio_burst = 1
     # time.sleep(0.001)
     gpios.gpio_burst = 0
-    
+
     data = my_sdr.rx()
-    
+
     chan1 = data[0]
     chan2 = data[1]
-        
+
     my_sdr.tx_destroy_buffer()
     print('done')
 
@@ -293,8 +282,39 @@ def gen_spectrum(frame):
 
     rx_bursts_fft = fft2(rx_bursts)
     range_doppler.set_data(log10(fftshift(abs(rx_bursts_fft))).T)
-    
+    filename = 'rd_%s_%i' % (cmn, i)
+    print(filename)
+    range_doppler_fig.savefig(filename, bbox_inches='tight')
+    i+= 1
+
     return [range_doppler]
 
-anim = FuncAnimation(range_doppler_fig, gen_spectrum, blit=True, repeat_delay=0)
-plt.show()
+cmaps = ['viridis', 'inferno', 'bwr', 'plasma', 'blues']
+
+for cmap_name in cmaps:
+    cmn = cmap_name
+    for index in range(20):
+        i = index
+        range_doppler = ax.imshow(log10(fftshift(abs(rx_bursts_fft))).T, aspect='auto',
+            extent=extent, origin='lower', cmap=get_cmap(cmn))
+
+        ax.set_title('Range Doppler Spectrum', fontsize=24)
+        ax.set_xlabel('Velocity [m/s]', fontsize=22)
+        ax.set_ylabel('Range [m]', fontsize=22)
+
+        max_range = 10
+        ax.set_ylim([0, max_range])
+        ax.set_yticks(np.arange(0, max_range, 2))
+        plt.xticks(fontsize=20)
+        plt.yticks(fontsize=20)
+        # colorbar = range_doppler_fig.colorbar(range_doppler, cmap=get_cmap('bwr'),
+        #     orientation='vertical')
+        # colorbar.set_label(label='Magnitude [dB]', size=22)
+
+        anim = FuncAnimation(range_doppler_fig, gen_spectrum, blit=True, repeat=False)
+        plt.show()
+
+"""
+    Now keep updating the range-Doppler spectrum
+"""
+

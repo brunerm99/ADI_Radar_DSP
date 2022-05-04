@@ -2,7 +2,10 @@
     Make a 2-D plot.
 """
 
-# %%
+import sys
+sys.path.insert(0, '..')
+sys.path.insert(0, '/home/marchall/documents/chill/.packages/pyadi-iio')
+sys.path.insert(0, '/home/marchall/documents/chill/.packages/libiio')
 
 import time
 import matplotlib.pyplot as plt

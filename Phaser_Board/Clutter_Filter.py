@@ -258,12 +258,11 @@ ax.set_ylabel('Range [m]', fontsize=28)
 max_range = 10
 ax.set_ylim([0, max_range])
 ax.set_yticks(np.arange(0, max_range, 2))
-plt.xticks(fontsize=24)
-plt.yticks(fontsize=24)
+ax.tick_params('both', labelsize=30)
 
 extent = [-max_doppler_vel, max_doppler_vel, dist.min(), dist.max()]
 range_doppler = ax.imshow(10 * log10(fftshift(abs(rx_bursts_fft))).T, aspect='auto', 
-    extent=extent, origin='lower', cmap=get_cmap('gist_rainbow'), vmin=30, vmax=70)
+    extent=extent, origin='lower', cmap=get_cmap('bwr'), vmin=30, vmax=90)
 # colorbar = fig.colorbar(range_doppler, 
 #     orientation='horizontal')
 # colorbar.set_label(label='Magnitude [dB]', size=22)
@@ -274,12 +273,12 @@ fig.savefig('Figures/Clutter/Range_Doppler_No_CF.png', bbox_inches='tight')
 
 # %%
 # Generate colorbar separately and save
-colorbar = fig.colorbar(range_doppler, cmap=get_cmap('bwr'), 
-    orientation='horizontal')
-colorbar.set_label(label='Magnitude [dB]', size=22)
-range_doppler.figure.axes[1].tick_params(axis="x", labelsize=18)
-ax.remove()
-fig.savefig('Figures/Clutter/Range_Doppler_Colorbar.png', bbox_inches='tight')
+# colorbar = fig.colorbar(range_doppler, cmap=get_cmap('bwr'),
+#     orientation='horizontal')
+# colorbar.set_label(label='Magnitude [dB]', size=22)
+# range_doppler.figure.axes[1].tick_params(axis="x", labelsize=18)
+# ax.remove()
+# fig.savefig('Figures/Clutter/Range_Doppler_Colorbar.png', bbox_inches='tight')
 
 # %%
 """
@@ -299,11 +298,10 @@ ax.set_ylabel('Range [m]', fontsize=28)
 max_range = 10
 ax.set_ylim([0, max_range])
 ax.set_yticks(np.arange(0, max_range, 2))
-plt.xticks(fontsize=24)
-plt.yticks(fontsize=24)
+ax.tick_params('both', labelsize=30)
 
 range_doppler_cf = ax.imshow(10 * log10(abs(rx_bursts_cf_fft)).T, aspect='auto', 
-    extent=extent, origin='lower', cmap=get_cmap('bwr'), vmin=20, vmax=70)
+    extent=extent, origin='lower', cmap=get_cmap('bwr'), vmin=30, vmax=90)
 
 # colorbar = fig.colorbar(range_doppler_cf, cmap=get_cmap('bwr'), 
 #     orientation='vertical')
@@ -322,11 +320,11 @@ test_fft_cf = fft(rx_bursts_cf[i])
 # plt.suptitle('Comparison of Range-FFT Spectrum\nWith and Without Clutter Filtering', 
 #     fontsize=26)
 fig1, ax1 = plt.subplots(figsize=(16, 8))
-plt.xticks(fontsize=16)
-plt.yticks(fontsize=16)
+plt.xticks(fontsize=20)
+plt.yticks(fontsize=20)
 fig2, ax2 = plt.subplots(figsize=(16, 8))
-plt.xticks(fontsize=16)
-plt.yticks(fontsize=16)
+plt.xticks(fontsize=20)
+plt.yticks(fontsize=20)
 ax1.set_title('Range-FFT Spectrum\nNo Clutter Filter', fontsize=24)
 ax2.set_title('Range-FFT Spectrum\nClutter Filter', fontsize=24)
 ax1.set_xlabel('Range [m]', fontsize=22)
@@ -341,7 +339,7 @@ xlim = np.array([-max_range, max_range])
 ax1.set_xlim(xlim)
 ax2.set_xlim(xlim)
 
-ylim = [20, 70]
+ylim = [20, 90]
 ax1.set_ylim(ylim)
 ax2.set_ylim(ylim)
 
@@ -372,7 +370,6 @@ fig1.savefig('Figures/Clutter/Without_CF.png', bbox_inches='tight')
 fig2.savefig('Figures/Clutter/With_CF.png', bbox_inches='tight')
 
 # %%
-plt.show()
 
 
 # Plot frequnecy domain stackplot
@@ -389,9 +386,11 @@ ax.set_ylabel('Slow time', fontsize=22)
 ax.set_xlabel('Frequency [MHz]\nDFT of Fast Time', fontsize=22)
 ax.set_title('Stack plot of all M buffers', fontsize=24)
 plt.tick_params(axis='y', left=False, which='both', labelleft=False)
-plt.xticks(size=16)
-plt.yticks(size=16)
+plt.xticks(size=20)
+plt.yticks(size=20)
 
 fig.savefig('Figures/Stack_Plot.png')
 
 # plt.show()
+
+plt.show()

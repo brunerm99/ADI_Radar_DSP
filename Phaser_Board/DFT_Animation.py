@@ -36,6 +36,10 @@ Simple FMCW demo with PHASER and ADALM-PLUTO
 waterfall plot modified from:  https://amyboyle.ninja/Pyqtgraph-live-spectrogram
 """
 
+import sys
+sys.path.insert(0, '..')
+sys.path.insert(0, '/home/marchall/documents/chill/.packages/pyadi-iio')
+
 import time
 from venv import create
 import matplotlib.pyplot as plt
@@ -53,7 +57,7 @@ import adi
 
 
 # Instantiate all the Devices
-rpi_ip = "ip:phaser.local"  # IP address of the Raspberry Pi
+rpi_ip = "ip:192.168.1.140"
 sdr_ip = "ip:192.168.2.1" # "192.168.2.1, or pluto.local"  # IP address of the Transreceiver Block
 
 try:

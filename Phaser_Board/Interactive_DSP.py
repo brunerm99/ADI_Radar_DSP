@@ -3,6 +3,10 @@
     without having to modify code and rerun everytime. 
 """
 
+import sys
+sys.path.insert(0, '..')
+sys.path.insert(0, '/home/marchall/documents/chill/.packages/pyadi-iio')
+
 # Imports
 from mimetypes import init
 from re import L
@@ -30,9 +34,9 @@ import adi
 
 # Instantiate all the Devices
 try:
-    import phaser_config
-    rpi_ip = phaser_config.rpi_ip
-    sdr_ip = "ip:192.168.2.1" # "192.168.2.1, or pluto.local"  # IP address of the Transreceiver Block
+	import phaser_config
+	rpi_ip = phaser_config.rpi_ip
+	sdr_ip = phaser_config.sdr_ip # "192.168.2.1, or pluto.local"  # IP address of the Transreceiver Block
 except:
     print('No config file found...')
     rpi_ip = "ip:phaser.local"  # IP address of the Raspberry Pi
@@ -113,24 +117,11 @@ my_phaser.delay_clk = 'PFD'     # can be 'PFD' or 'PFD*CLK1'
 my_phaser.delay_start_en = 0         # delay start
 my_phaser.ramp_delay_en = 0          # delay between ramps.  
 my_phaser.trig_delay_en = 0          # triangle delay
-my_phaser.ramp_mode = "continuous_triangular"     # ramp_mode can be:  "disabled", "continuous_sawtooth", "continuous_triangular", "single_sawtooth_burst", "single_ramp_burst"
-my_phaser.sing_ful_tri = 0           # full triangle enable/disable -- this is used with the single_ramp_burst mode 
-my_phaser.tx_trig_en = 0             # start a ramp with TXdata
 # Enable ADF4159 TX input and generate a single triangular ramp with each trigger
-# my_phaser.ramp_mode = "single_ramp_burst"     # ramp_mode can be:  "disabled", "continuous_sawtooth", "continuous_triangular", "single_sawtooth_burst", "single_ramp_burst"
-# my_phaser.sing_ful_tri = 1           # full triangle enable/disable -- this is used with the single_ramp_burst mode 
-# my_phaser.tx_trig_en = 1             # start a ramp with TXdata
+my_phaser.ramp_mode = "single_ramp_burst"     # ramp_mode can be:  "disabled", "continuous_sawtooth", "continuous_triangular", "single_sawtooth_burst", "single_ramp_burst"
+my_phaser.sing_ful_tri = 1           # full triangle enable/disable -- this is used with the single_ramp_burst mode
+my_phaser.tx_trig_en = 1             # start a ramp with TXdata
 my_phaser.enable = 0                 # 0 = PLL enable.  Write this last to update all the registers
-
-"""
-    Configure TDD controller
-"""
-tdd = adi.tdd(sdr_ip)
-tdd.frame_length_ms = 4    # each GPIO toggle is spaced 4ms apart
-tdd.burst_count = 20       # there is a burst of 20 toggles, then off for a long time
-tdd.rx_rf_ms = [0.5,0.6, 0, 0]    # each GPIO pulse will be 100us (0.6ms - 0.5ms).  And the first trigger will happen 0.5ms into the buffer
-tdd.secondary = False
-tdd.en = True
 
 # buffer size needs to be greater than the frame_time
 # frame_time = tdd.frame_length_ms*tdd.burst_count/2
@@ -174,8 +165,9 @@ q = np.sin(2 * np.pi * t * fc) * 2 ** 14
 iq = 1 * (i + 1j * q)
 
 # Send data
-my_sdr._ctx.set_timeout(0)
+my_sdr._ctx.set_timeout(60000)
 my_sdr.tx([iq*0.5, iq])  # only send data to the 2nd channel (that's all we need)
+print('tx')
 
 """
     init_plot()
@@ -188,7 +180,9 @@ my_sdr.tx([iq*0.5, iq])  # only send data to the 2nd channel (that's all we need
 def init_plot(cfar_params=None, axis_limits=[-sample_rate / 2e3, sample_rate / 2e3, 0, 70], 
     masked=False):
     # Collect raw data buffer, take DFT, and do basic processing
+    print('before')
     x_n = my_sdr.rx()
+    print('after')
     x_n = x_n[0] + x_n[1]
 
     X_k = absolute(fft(x_n))
@@ -199,6 +193,7 @@ def init_plot(cfar_params=None, axis_limits=[-sample_rate / 2e3, sample_rate / 2
     fig, ax = plt.subplots()
     fig.set_figheight(8)
     fig.set_figwidth(16)
+    ax.tick_params('both', labelsize=20)
     ax.set_title("Received Signal - Frequency Domain", fontsize=24)
     ax.set_xlabel("Frequency [kHz]", fontsize=22)
     ax.set_ylabel("Magnitude [dB]", fontsize=22)
@@ -535,7 +530,7 @@ Options:
                 cli_cutoff = input('Enter cutoff frequency(-ies) [Hz]: ').split(',')
                 cutoff = tuple(map(lambda x : float(x), cli_cutoff))
 
-                cli_rp = int(input('Enter maximum ripple [dB]: '))
+                cli_rp = float(input('Enter maximum ripple [dB]: '))
                 cli_filter_order = int(input('Enter filter order: '))
 
                 print('Filter options:')
@@ -652,7 +647,7 @@ Options:
                 Save current figure to a figure of filename './{fig_dir}/{filename}.png'.
             """
             cli_filename = input('Input filename (no extension): ')
-            fig.savefig(fig_dir + cli_filename + '.png')
+            fig.savefig(fig_dir + cli_filename + '.png', bbox_inches='tight')
             print('Figure saved to: %s' % (fig_dir + cli_filename + '.png'))
         elif (cli_input == 'n'):
             # try:
@@ -691,4 +686,5 @@ if __name__ == '__main__':
         'method': 'average',
     }
 
+    print('running')
     dsp_cli()

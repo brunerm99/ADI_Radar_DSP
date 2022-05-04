@@ -34,6 +34,10 @@
 
 '''To test this script, shine a 10.5GHz HB100 source on the array'''
 
+import sys
+sys.path.insert(0, '..')
+sys.path.insert(0, '/home/marchall/documents/chill/.packages/pyadi-iio')
+
 from operator import index
 import matplotlib.pyplot as plt
 from matplotlib.cm import get_cmap
@@ -55,9 +59,9 @@ from time import sleep
 
 # Instantiate all the Devices
 try:
-    import phaser_config
-    rpi_ip = phaser_config.rpi_ip
-    sdr_ip = "ip:192.168.2.1" # "192.168.2.1, or pluto.local"  # IP address of the Transreceiver Block
+	import phaser_config
+	rpi_ip = phaser_config.rpi_ip
+	sdr_ip = phaser_config.sdr_ip # "192.168.2.1, or pluto.local"  # IP address of the Transreceiver Block
 except:
     print('No config file found...')
     rpi_ip = "ip:phaser.local"  # IP address of the Raspberry Pi
@@ -109,7 +113,7 @@ gpio = adi.one_bit_adc_dac(sdr_ip)
 time.sleep(0.5)
 gpio.gpio_phaser_enable = True
 time.sleep(0.5)
-gpio.gpio_tdd_ext_sync = True   # If set to True, this enables external capture triggering using the L24N GPIO on the Pluto.  When set to false, an internal trigger pulse will be generated every second
+gpio.gpio_tdd_ext_sync = True # If set to True, this enables external capture triggering using the L24N GPIO on the Pluto.  When set to false, an internal trigger pulse will be generated every second
 
 # Configure the ADF4159 Rampling PLL
 output_freq = 12.1e9
@@ -201,10 +205,10 @@ N = chan1.size
 time = np.linspace(0, ts * N, N)
 
 # Plot full time domain signal
-fig1, ax1 = plt.subplots(figsize=(16, 8))
-ax1.plot(time * 1e3, np.abs(chan1))
-ax1.set_title('Received Signal', fontsize=20)
-ax1.set_xlabel('Time [ms]', fontsize=18)
+# fig1, ax1 = plt.subplots(figsize=(16, 8))
+# ax1.plot(time * 1e3, np.abs(chan1))
+# ax1.set_title('Received Signal', fontsize=20)
+# ax1.set_xlabel('Time [ms]', fontsize=18)
 
 # %%
 # Split into frames
@@ -284,9 +288,16 @@ ax.legend(loc='upper right', fontsize=16)
 # %%
 fig, ax = plt.subplots(figsize=(16, 16))
 
+max_doppler_vel = max_doppler_freq * wavelength / 2
+velocity_axis = np.linspace(-max_doppler_vel, max_doppler_vel, num_bursts)
+# rx_bursts_fft[np.where((velocity_axis > -0.4) & (velocity_axis < -0.3))] = 0
+
+cmaps = ['inferno', 'blues']
+cmap_name = cmaps[0]
 extent = [-max_doppler_vel, max_doppler_vel, dist.min(), dist.max()]
 range_doppler = ax.imshow(log10(rx_bursts_fft).T, aspect='auto', 
-    extent=extent, origin='lower', cmap=get_cmap('bwr'), vmin=2, vmax=7)
+                          extent=extent, origin='lower', cmap=get_cmap(cmap_name),
+                          vmin=1, vmax=9)
 
 ax.set_title('Range Doppler Spectrum', fontsize=24)
 ax.set_xlabel('Velocity [m/s]', fontsize=22)
@@ -295,23 +306,25 @@ ax.set_ylabel('Range [m]', fontsize=22)
 max_range = 10
 ax.set_ylim([0, max_range])
 ax.set_yticks(np.arange(0, max_range, 2))
-plt.xticks(fontsize=16)
-plt.yticks(fontsize=16)
-# colorbar = fig.colorbar(range_doppler, cmap=get_cmap('bwr'), 
+plt.xticks(fontsize=20)
+plt.yticks(fontsize=20)
+# colorbar = fig.colorbar(range_doppler, cmap=get_cmap('bwr'),
 #     orientation='vertical')
 # colorbar.set_label(label='Magnitude [dB]', size=22)
-
+fig.savefig('Figures/Range_Doppler/statonary_%s.png' % cmap_name, bbox_inches='tight')
 # fig.savefig('Figures/Range_Doppler_Moving_Backward_Refl_0-%i_bwr_hires.png' % (max_range)) #, facecolor='w')
 # fig.savefig('Figures/Range_Doppler_Moving_Forward_Refl_0-%i_bwr_hires.png' % (max_range)) #, facecolor='w')
 # fig.savefig('Figures/Range_Doppler_Stationary_Refl_0-%i_bwr_hires.png' % (max_range)) #, facecolor='w')
 
 # %%
 # Get colorbar separately
-# colorbar = fig.colorbar(range_doppler, cmap=get_cmap('bwr'), 
+# ax.tick_params('both', labelsize=20)
+# colorbar = fig.colorbar(range_doppler, cmap=get_cmap(cmap_name),
 #     orientation='horizontal')
 # colorbar.set_label(label='Magnitude [dB]', size=22)
+# colorbar.ax.tick_params(labelsize=20)
 # ax.remove()
-# fig.savefig('Figures/Range_Doppler_Colorbar_bwr.png', bbox_inches='tight') #, facecolor='w')
+# fig.savefig('Figures/Range_Doppler/Range_Doppler_Colorbar_%s.png' % cmap_name, bbox_inches='tight')
 
 # %%
 # 3D Plot
