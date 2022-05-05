@@ -335,7 +335,7 @@ class Window(QMainWindow):
 		self.range_doppler_view.setColorMap(cmap)
 
 		# self.range_doppler_view.setFixedSize(300, 300)
-		layout.addWidget(self.range_doppler_view, 6, 0, 4, 2)
+		layout.addWidget(self.range_doppler_view, 7, 0, 3, 2)
 
 		widget.setLayout(layout)
 
