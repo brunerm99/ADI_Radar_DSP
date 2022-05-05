@@ -34,9 +34,9 @@ import adi
 
 # Instantiate all the Devices
 try:
-	import phaser_config
-	rpi_ip = phaser_config.rpi_ip
-	sdr_ip = phaser_config.sdr_ip # "192.168.2.1, or pluto.local"  # IP address of the Transreceiver Block
+        import phaser_config
+        rpi_ip = phaser_config.rpi_ip
+        sdr_ip = phaser_config.sdr_ip # "192.168.2.1, or pluto.local"  # IP address of the Transreceiver Block
 except:
     print('No config file found...')
     rpi_ip = "ip:phaser.local"  # IP address of the Raspberry Pi
@@ -118,9 +118,9 @@ my_phaser.delay_start_en = 0         # delay start
 my_phaser.ramp_delay_en = 0          # delay between ramps.  
 my_phaser.trig_delay_en = 0          # triangle delay
 # Enable ADF4159 TX input and generate a single triangular ramp with each trigger
-my_phaser.ramp_mode = "single_ramp_burst"     # ramp_mode can be:  "disabled", "continuous_sawtooth", "continuous_triangular", "single_sawtooth_burst", "single_ramp_burst"
-my_phaser.sing_ful_tri = 1           # full triangle enable/disable -- this is used with the single_ramp_burst mode
-my_phaser.tx_trig_en = 1             # start a ramp with TXdata
+my_phaser.ramp_mode = "continuous_triangular" # ramp_mode can be:  "disabled", "continuous_sawtooth", "continuous_triangular", "single_sawtooth_burst", "single_ramp_burst"
+my_phaser.sing_ful_tri = 0           # full triangle enable/disable -- this is used with the single_ramp_burst mode
+my_phaser.tx_trig_en = 0             # start a ramp with TXdata
 my_phaser.enable = 0                 # 0 = PLL enable.  Write this last to update all the registers
 
 # buffer size needs to be greater than the frame_time
