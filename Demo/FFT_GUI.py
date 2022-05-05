@@ -10,6 +10,7 @@ sys.path.insert(0, '/home/marchall/documents/chill/.packages/libiio')
 from pyqtgraph.Qt import QtGui, QtCore
 from PyQt5.QtCore import Qt
 from PyQt5.QtWidgets import *
+from PyQt5.QtGui import QTransform
 import pyqtgraph as pg
 import numpy as np
 from numpy import arange, sin, cos, pi, log10
@@ -127,7 +128,7 @@ while frame_time > buffer_time:
     buffer_size = int(2**power)
     buffer_time = buffer_size/my_sdr.sample_rate*1000   # buffer time in ms
     if power==23:
-        break     # max pluto buffer size is 2**23, but for tdd burst mode, set to 2**22
+	    break     # max pluto buffer size is 2**23, but for tdd burst mode, set to 2**22
 print("buffer_size:", buffer_size)
 my_sdr.rx_buffer_size = buffer_size
 print("buffer_time:", buffer_time, " ms")
@@ -184,6 +185,7 @@ max_dist = (fs / 2 - signal_freq) * c / slope
 # dist = np.linspace(-max_dist, max_dist, N_frame)
 dist = (freq - signal_freq) * c / (2 * slope)
 
+# Selector variables
 xdata = freq
 plot_dist = False
 range_norm = False
@@ -298,26 +300,42 @@ class Window(QMainWindow):
 		self.plot.setXRange(signal_freq, fs / 2)
 
 		# Range-Doppler plot
-		# self.range_doppler_view = pg.ImageView()
-		# # self.range_doppler = pg.image()
-		# # self.range_doppler_view.setImage(self.range_doppler)
-		# colormap = cm.get_cmap('bwr')  # cm.get_cmap("CMRmap")
-		# colormap._init()
-		# lut = (colormap._lut * 255).view(np.ndarray)
-		# colors = [
-		# 	(0, 0, 0),
-		# 	(4, 5, 61),
-		# 	(84, 42, 55),
-		# 	(15, 87, 60),
-		# 	(208, 17, 141),
-		# 	(255, 255, 255)
-		# 	]
+		# There are significantly more fast time indices (N_frame)
+		# than slow time (num_bursts)
+		self.transform = QTransform()
+		self.transform.translate(0, 0)
+		y_scale = N_frame / num_bursts
+		self.transform.scale(y_scale, 1)
 
-		# # color map
-		# cmap = pg.ColorMap(pos=np.linspace(0.0, 1.0, 6), color=lut)
-		# # self.range_doppler_view.setColorMap(cmap)
+		range_doppler_plot = pg.PlotItem()
+		range_doppler_plot.setLabel(axis='left', text='Range', units='m')
+		range_doppler_plot.setLabel(axis='bottom', text='Velocity', units='m/s')
+		# range_doppler_plot.setXRange(-10, 10)
+		range_doppler_plot.invertX(False)
+		range_doppler_plot.invertY(True)
+		# self.velocity_axis = range_doppler_plot.getAxis('bottom')
+		# xticks = [[zip(range(num_bursts), velocity_axis)], [zip(range(num_bursts), velocity_axis)]]
+		# self.velocity_axis.setTicks(xticks)
+		self.range_doppler_view = pg.ImageView(view=range_doppler_plot)
+
+		colormap = cm.get_cmap('bwr')  # cm.get_cmap("CMRmap")
+		colormap._init()
+		self.lut = (colormap._lut * 255).view(np.ndarray)
+		colors = [
+			(0, 0, 0),
+			(4, 5, 61),
+			(84, 42, 55),
+			(15, 87, 60),
+			(208, 17, 141),
+			(255, 255, 255)
+			]
+
+		# Color map
+		cmap = pg.ColorMap(pos=np.linspace(0.0, 1.0, 259), color=self.lut)
+		self.range_doppler_view.setColorMap(cmap)
+
 		# self.range_doppler_view.setFixedSize(300, 300)
-		# layout.addWidget(self.range_doppler_view, 6, 0, 4, 2)
+		layout.addWidget(self.range_doppler_view, 6, 0, 4, 2)
 
 		widget.setLayout(layout)
 
@@ -328,12 +346,10 @@ class Window(QMainWindow):
 		""" Updates the slider bar label with RF bandwidth and range resolution
 
 		Returns:
-		None
+			None
 		"""
 		bw = self.bw_slider.value() * 1e6
 		range_res = c / (2 * bw)
-		my_phaser.freq_dev_range = int(BW/4) # frequency deviation range in Hz
-		my_phaser.enable = 0
 		self.range_res_label.setText("B<sub>RF</sub>: %0.2f MHz - R<sub>res</sub>: %0.2f m" %
 									 (bw / 1e6, c / (2 * bw)))
 
@@ -341,19 +357,24 @@ class Window(QMainWindow):
 		""" Updates the slider bar label with RF bandwidth and range resolution
 
 		Returns:
-		None
+			None
 		"""
-		my_phaser.freq_dev_range = int(BW/4) # frequency deviation range in Hz
+		global dist, slope
+		bw = self.bw_slider.value() * 1e6
+		slope = bw / ramp_time_s
+		dist = (freq - signal_freq) * c / (2 * slope)
+		print('New slope: %0.2fMHz/s' % (slope / 1e6))
+		my_phaser.freq_dev_range = int(bw/4) # frequency deviation range in Hz
 		my_phaser.enable = 0
 
 	def do_range_norm(self, state):
 		""" Toggles range normalization
 
 		Args:
-		state (QtCore.Qt.Checked) : State of check box
+			state (QtCore.Qt.Checked) : State of check box
 
 		Returns:
-		None
+			None
 		"""
 		global range_norm
 		if (state == QtCore.Qt.Checked):
@@ -367,10 +388,10 @@ class Window(QMainWindow):
 		""" Toggles between showing frequency and range for the x-axis
 
 		Args:
-		state (QtCore.Qt.Checked) : State of check box
+			state (QtCore.Qt.Checked) : State of check box
 
 		Returns:
-		None
+			None
 		"""
 		global plot_dist
 		plot_state = win.plot.getViewBox().state
@@ -393,7 +414,7 @@ class Window(QMainWindow):
 		""" Toggles CFAR thresholding
 
 		Returns:
-		None
+			None
 		"""
 		global cfar_toggle
 		if (state == QtCore.Qt.Checked):
@@ -407,7 +428,7 @@ class Window(QMainWindow):
 		""" Toggles CFAR thresholding
 
 		Returns:
-		None
+			None
 		"""
 		global clutter_toggle
 		if (state == QtCore.Qt.Checked):
@@ -428,9 +449,9 @@ def update():
 	""" Updates the FFT in the window
 
 	Returns:
-	None
+		None
 	"""
-	global index, xdata, plot_dist, range_norm
+	global index, xdata, plot_dist, range_norm, rx_bursts
 	label_style = {'color': '#FFF', 'font-size': '14pt'}
 	# x_n = np.sin(omega * t) + noise[index % 10]
 	# X_k = fft(x_n, n=fft_size)
@@ -453,18 +474,11 @@ def update():
 		rx_bursts[burst] = chan1[start_offset_index + (burst + 1) * N_frame:
 		start_offset_index + (burst + 2) * N_frame]
 
-	burst_0 = rx_bursts[0]
+	burst_0 = rx_bursts[-1]
 	X_k = fft(burst_0)
 	rx_bursts_fft = fft2(rx_bursts)
 
-	# x_n = my_sdr.rx()
-	# x_n = x_n[0] + x_n[1]
-
-	# X_k = fft(x_n, n=fft_size)
-
-	"""
-		A bunch of options defined in the UI components
-	"""
+	# A bunch of options defined in the UI components
 	bias = 3
 	num_guard_cells = 10
 	num_ref_cells = 30
@@ -479,12 +493,11 @@ def update():
 
 	if (clutter_toggle):
 		max_clutter_vel = 0.1
-		rx_bursts_cf_fft = fftshift(rx_bursts_fft.copy())
-		# rx_bursts_cf_fft[np.where((velocity_axis > -max_clutter_vel) &
-		# 			  (velocity_axis < max_clutter_vel))] = 0
-		rx_bursts_fft[np.where((velocity_axis > -0.4) & (velocity_axis < -0.3))] = 0
-		rx_bursts_cf = ifft2(ifftshift(rx_bursts_cf_fft))
-		X_k = rx_bursts_cf[0]
+		rx_bursts_fft = fftshift(rx_bursts_fft.copy())
+		rx_bursts_fft[np.where((velocity_axis > -max_clutter_vel) &
+					  (velocity_axis < max_clutter_vel))] = 1e-50
+		rx_bursts = ifft2(ifftshift(rx_bursts_fft))
+		X_k = rx_bursts[-1]
 
 	if (plot_dist):
 		# print('dist')
@@ -498,8 +511,13 @@ def update():
 		# win.plot.setXRange(-fs / 2, fs / 2)
 		win.plot.setLabel('bottom', text='Frequency', units='Hz', **label_style)
 
-	# win.range_doppler_view.setImage(log10(fftshift(abs(rx_bursts_FFT))).T)
-	# win.range_doppler.enableAutoRange('xy', False)
+	# Range Doppler plot
+	print(rx_bursts_fft.shape)
+	print(velocity_axis.shape, num_bursts)
+	win.range_doppler_view.setImage(log10(fftshift(abs(rx_bursts_fft))),
+					transform=win.transform, levels=(2, 8),
+					autoLevels=False, autoHistogramRange=False,
+					autoRange=False) #, xvals=velocity_axis)
 
 	if index == 1:
 		win.plot.enableAutoRange('xy', False)
@@ -507,7 +525,7 @@ def update():
 
 timer = QtCore.QTimer()
 timer.timeout.connect(update)
-timer.start(0)
+timer.start(500)
 
 # start the app
 sys.exit(App.exec())

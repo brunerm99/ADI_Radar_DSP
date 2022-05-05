@@ -10,6 +10,7 @@ sys.path.insert(0, '/home/marchall/documents/chill/.packages/libiio')
 from pyqtgraph.Qt import QtGui, QtCore
 from PyQt5.QtCore import Qt
 from PyQt5.QtWidgets import *
+from PyQt5.QtSvg import QSvgWidget
 import pyqtgraph as pg
 import numpy as np
 from numpy import arange, sin, cos, pi, log10
@@ -18,6 +19,10 @@ from scipy import signal
 from scipy import interpolate
 import time
 from matplotlib import cm
+from io import BytesIO
+import matplotlib.pyplot as plt
+import matplotlib as mpl
+mpl.rcParams['mathtext.fontset'] = 'cm'
 
 import adi
 from Phaser_Functions import range_norm as range_norm_func
@@ -111,9 +116,7 @@ my_phaser.tx_trig_en = 0             # start a ramp with TXdata
 # my_phaser.tx_trig_en = 1             # start a ramp with TXdata
 my_phaser.enable = 0                 # 0 = PLL enable.  Write this last to update all the registers
 
-"""
-    Print config
-"""
+# Print config
 print("""
 CONFIG:
 Sample rate: {sample_rate}MHz
@@ -124,6 +127,7 @@ Output frequency: {output_freq}MHz
 IF: {signal_freq}kHz
 """.format(sample_rate=sample_rate / 1e6, Nlog2=int(np.log2(fft_size)),
 	   BW=BW / 1e6, ramp_time=ramp_time / 1e3, output_freq=output_freq / 1e6,
+
 	   signal_freq=signal_freq / 1e3))
 
 # Create a sinewave waveform
@@ -147,7 +151,6 @@ N_frame = fft_size
 freq = np.linspace(-fs / 2, fs / 2, int(N_frame))
 slope = BW / 4 / ramp_time_s
 max_dist = (fs / 2 - signal_freq) * c / slope
-# dist = np.linspace(-max_dist, max_dist, N_frame)
 dist = (freq - signal_freq) * c / (2 * slope)
 
 xdata = freq
@@ -160,13 +163,39 @@ omega = 2 * pi * f
 x_n = np.sin(omega * t)
 noise = 0.3 * np.random.normal(size=(10, N))
 
+def tex2svg(formula, fontsize=12, dpi=300):
+    """ Render TeX formula to SVG
+
+	Thanks github/gmarull
+
+    Args:
+        formula (str): TeX formula.
+        fontsize (int, optional): Font size.
+        dpi (int, optional): DPI.
+
+    Returns:
+        str: SVG render.
+    """
+
+    fig = plt.figure(figsize=(0.01, 0.01))
+    fig.text(0, 0, r'${}$'.format(formula), fontsize=fontsize)
+
+    output = BytesIO()
+    fig.savefig(output, dpi=dpi, transparent=True, format='svg',
+                bbox_inches='tight', pad_inches=0.0, frameon=False)
+    plt.close(fig)
+
+    output.seek(0)
+    return output.read()
+
 class Window(QMainWindow):
 	def __init__(self):
 		super().__init__()
 		self.setWindowTitle("Interactive FFT")
 		self.setGeometry(100, 100, 600, 500)
-		self.UiComponents()
 
+		self.num_rows = 12
+		self.UiComponents()
 
 		# showing all the widgets
 		self.show()
@@ -177,12 +206,6 @@ class Window(QMainWindow):
 
 		global layout
 		layout = QGridLayout()
-
-		# creating a push button object
-		btn = QPushButton('Push Button')
-
-		# creating a line edit widget
-		text = QLineEdit("Line Edit")
 
 		# Control Panel
 		control_label = QLabel('Control Panel')
@@ -208,6 +231,14 @@ class Window(QMainWindow):
 		layout.addWidget(self.x_axis_check, 1, 0)
 		layout.addWidget(self.range_norm_check, 2, 0)
 
+		# CFAR toggle
+		self.cfar_checkbox = QCheckBox('Toggle CFAR')
+		font = self.cfar_checkbox.font()
+		font.setPointSize(15)
+		self.cfar_checkbox.setFont(font)
+		self.cfar_checkbox.stateChanged.connect(self.toggle_cfar)
+		layout.addWidget(self.cfar_checkbox, 3, 0, 1, 2)
+
 		# Range resolution
 		# Changes with the RF BW slider
 		self.range_res_label = QLabel("B<sub>RF</sub>: %0.2f MHz - R<sub>res</sub>: %0.2f m" %
@@ -217,7 +248,7 @@ class Window(QMainWindow):
 		self.range_res_label.setFont(font)
 		self.range_res_label.setAlignment(Qt.AlignRight)
 		self.range_res_label.setMinimumWidth(300)
-		layout.addWidget(self.range_res_label, 5, 1)
+		layout.addWidget(self.range_res_label, 4, 1)
 
 		# RF bandwidth slider
 		self.bw_slider = QSlider(Qt.Horizontal)
@@ -227,19 +258,25 @@ class Window(QMainWindow):
 		self.bw_slider.setTickInterval(30)
 		self.bw_slider.setTickPosition(QSlider.TicksBelow)
 		self.bw_slider.valueChanged.connect(self.get_range_res)
-		layout.addWidget(self.bw_slider, 5, 0)
+		layout.addWidget(self.bw_slider, 4, 0)
 
 		self.set_bw = QPushButton('Set RF Bandwidth')
 		self.set_bw.pressed.connect(self.set_range_res)
-		layout.addWidget(self.set_bw, 6, 0, 1, 2)
+		layout.addWidget(self.set_bw, 5, 0, 1, 2)
 
-		# CFAR toggle
-		self.cfar_checkbox = QCheckBox('Toggle CFAR')
-		font = self.cfar_checkbox.font()
-		font.setPointSize(15)
-		self.cfar_checkbox.setFont(font)
-		self.cfar_checkbox.stateChanged.connect(self.toggle_cfar)
-		layout.addWidget(self.cfar_checkbox, 3, 0, 1, 2)
+		# Display formulas for reference
+		range_formula = r'R = \frac{f_{beat}c}{2S}'
+		range_res_formula = r'R_{res} = \frac{c}{2B_{RF}}'
+		slope_formula = r'S = \frac{B_{RF}}{t_{ramp}}'
+		self.range_svg = QSvgWidget()
+		self.range_svg.load(tex2svg(range_formula, fontsize=6, dpi=100))
+		self.slope_svg = QSvgWidget()
+		self.slope_svg.load(tex2svg(slope_formula, fontsize=6, dpi=100))
+		self.range_res_svg = QSvgWidget()
+		self.range_res_svg.load(tex2svg(range_res_formula, fontsize=6, dpi=100))
+		layout.addWidget(self.range_res_svg, self.num_rows - 2, 0, 1, 1)
+		layout.addWidget(self.slope_svg, self.num_rows - 2, 1, 1, 1)
+		layout.addWidget(self.range_svg, self.num_rows - 1, 0, 1, 1)
 
 		# FFT plot
 		self.plot = pg.plot()
@@ -250,7 +287,7 @@ class Window(QMainWindow):
 		self.plot.setLabel('bottom', text='Frequency', units='Hz', **label_style)
 		self.plot.setLabel('left', text='Magnitude', units='dB', **label_style)
 		self.plot.setTitle('Received Signal - Frequency Spectrum', **title_style)
-		layout.addWidget(self.plot, 0, 2, 10, 1)
+		layout.addWidget(self.plot, 0, 2, self.num_rows, 1)
 		self.plot.setYRange(0, 10)
 		self.plot.setXRange(signal_freq, fs / 2)
 
@@ -263,20 +300,18 @@ class Window(QMainWindow):
 		""" Updates the slider bar label with RF bandwidth and range resolution
 
 		Returns:
-		None
+			None
 		"""
 		bw = self.bw_slider.value() * 1e6
 		range_res = c / (2 * bw)
-		# my_phaser.freq_dev_range = int(BW/4) # frequency deviation range in Hz
-		# my_phaser.enable = 0
 		self.range_res_label.setText("B<sub>RF</sub>: %0.2f MHz - R<sub>res</sub>: %0.2f m" %
 									 (bw / 1e6, c / (2 * bw)))
 
 	def set_range_res(self):
-		""" Updates the slider bar label with RF bandwidth and range resolution
+		""" Sets the RF bandwidth
 
 		Returns:
-		None
+			None
 		"""
 		global dist, slope
 		bw = self.bw_slider.value() * 1e6
@@ -290,10 +325,10 @@ class Window(QMainWindow):
 		""" Toggles range normalization
 
 		Args:
-		state (QtCore.Qt.Checked) : State of check box
+			state (QtCore.Qt.Checked) : State of check box
 
 		Returns:
-		None
+			None
 		"""
 		global range_norm
 		if (state == QtCore.Qt.Checked):
@@ -307,10 +342,10 @@ class Window(QMainWindow):
 		""" Toggles between showing frequency and range for the x-axis
 
 		Args:
-		state (QtCore.Qt.Checked) : State of check box
+			state (QtCore.Qt.Checked) : State of check box
 
 		Returns:
-		None
+			None
 		"""
 		global plot_dist, slope
 		plot_state = win.plot.getViewBox().state
@@ -333,7 +368,7 @@ class Window(QMainWindow):
 		""" Toggles CFAR thresholding
 
 		Returns:
-		None
+			None
 		"""
 		global cfar_toggle
 		if (state == QtCore.Qt.Checked):
@@ -354,7 +389,7 @@ def update():
 	""" Updates the FFT in the window
 
 	Returns:
-	None
+		None
 	"""
 	global index, xdata, plot_dist, range_norm, freq, dist
 	label_style = {'color': '#FFF', 'font-size': '14pt'}
@@ -364,9 +399,7 @@ def update():
 
 	X_k = fft(x_n, n=fft_size)
 
-	"""
-		A bunch of options defined in the UI components
-	"""
+	# A bunch of options defined in the UI components
 	bias = 3
 	num_guard_cells = 10
 	num_ref_cells = 30
@@ -380,7 +413,6 @@ def update():
 		# win.plot.enableAutoRange('xy', True)
 
 	if (plot_dist):
-		# print('dist')
 		# print(win.plot.getViewBox().state)
 		win.curve.setData(dist, fftshift(log10(abs(X_k))))
 		# win.plot.setXRange(0, max_dist)
