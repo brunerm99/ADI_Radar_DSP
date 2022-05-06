@@ -274,9 +274,9 @@ class Window(QMainWindow):
 		self.slope_svg.load(tex2svg(slope_formula, fontsize=6, dpi=100))
 		self.range_res_svg = QSvgWidget()
 		self.range_res_svg.load(tex2svg(range_res_formula, fontsize=6, dpi=100))
-		layout.addWidget(self.range_res_svg, self.num_rows - 2, 0, 1, 1)
-		layout.addWidget(self.slope_svg, self.num_rows - 2, 1, 1, 1)
-		layout.addWidget(self.range_svg, self.num_rows - 1, 0, 1, 1)
+		# layout.addWidget(self.range_res_svg, self.num_rows - 2, 0, 1, 1)
+		# layout.addWidget(self.slope_svg, self.num_rows - 2, 1, 1, 1)
+		# layout.addWidget(self.range_svg, self.num_rows - 1, 0, 1, 1)
 
 		# FFT plot
 		self.plot = pg.plot()
